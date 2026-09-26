@@ -23,7 +23,7 @@ const path = require('path');
 const { zmcdRateLimit, fetchFilesRateLimit, newSessionRateLimit, systemRecoveryRateLimit, downloadRateLimit, getBrowserSessionRateLimit, getRequestIP } = require('./rateLimiters');
 const moderationDir = path.resolve(__dirname, '../../moderation');
 const knownIpsPath = path.join(moderationDir, 'known_ips.txt');
-const bannedIpsPath = path.join(moderationDir, 'banned_ips.txt');
+const bannedIpsPath = path.join(moderationDir, 'banned_ips.json');
 const ipLogsPath = path.join(moderationDir, 'ip_logs.txt');
 const userAccountsDir = path.resolve(__dirname, './zmcdfiles');
 const readIpList = (filePath) => {
@@ -34,8 +34,8 @@ const readIpList = (filePath) => {
     }
 };
 const knownIps = readIpList(knownIpsPath);
-const bannedIps = readIpList(bannedIpsPath);
-
+const bannedIpdata = JSON.parse(fs.readFileSync(bannedIpsPath));
+const bannedIps = Array.isArray(bannedIpdata.ips) ? bannedIpdata.ips.map((entry) => entry.address).filter((address) => typeof address === 'string' && address.trim().length > 0) : [];
 async function isValidUpdateUser(username, password) {
     const normalizedUsername = String(username || '').trim();
     const normalizedPassword = String(password || '').trim();
@@ -108,10 +108,22 @@ if (!config.enableWorkers || !cluster.isMaster) {
             fsp.appendFile(knownIpsPath, ip + '\n').catch(() => {});
         }
         if (bannedIps.includes(ip)) {
-            console.log('(SERVER) banned ip: ' + ip + ' url: ' + req.url + " username: " + (req.headers['x-username'] || 'unknown'));
-            res.writeHead(403);
-            res.end(JSON.stringify({ error: "You have been banned. Yep." }));
-            return true;
+            const banEntry = bannedIpdata.ips.find((entry) => entry.address === ip);
+            if (banEntry && banEntry.expiration) {
+                const expirationDate = new Date(banEntry.expiration * 1000);
+                const daysRemaining = Math.ceil((expirationDate - new Date()) / (1000 * 60 * 60 * 24));
+                if (daysRemaining > 0) {
+                    console.log('(SERVER) banned ip: ' + ip + ' url: ' + req.url + " username: " + (req.headers['x-username'] || 'unknown'));
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: `You have been banned. Yep. Expires in ${daysRemaining < 34 ? daysRemaining : 34} days.` }));
+                    return true;
+                }
+            }
+            else {
+                res.writeHead(403);
+                res.end(JSON.stringify({ error: "You have been banned. Yep. Expires in 34 days." }));
+                return true;
+            }
         }
         if (!req.url) return;
         if (req.url.startsWith('/server/newsession')) {

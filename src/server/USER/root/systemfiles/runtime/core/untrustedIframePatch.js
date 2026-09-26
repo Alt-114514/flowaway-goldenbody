@@ -782,7 +782,7 @@ window.addEventListener("pointerup", (e) => {
     let Observer = window.__goldenbodyAPI.Observer;
     let pingObserver = new Observer((data) => {
         if (data.type === "ping") {
-            window.parent.postMessage({type: "pong", channel: appName}, '*');
+            window.parent.postMessage({type: "pong"}, '*');
         }
     }, "ping");
     window.pingObserver = pingObserver;

@@ -8,7 +8,6 @@ build/
 archive/
 .vscode/
 .env
-moderation/
 
 # don't commit session and cache data
 sessions/*

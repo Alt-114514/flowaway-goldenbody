@@ -129,3 +129,6 @@
 ## V 2.3.4
 - tweaked how paste/clipboard works.
 - added notification lists and startupNotifications
+
+## V 2.3.4
+- fixed a paste file bug last update introduced, reworked how server bans work

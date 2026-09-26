@@ -785,7 +785,7 @@
   }
 
   // API to push notifications into the stack
-  window.protectedGlobals.notification = function (message) {
+  window.protectedGlobals.stackNotification = function (message) {
     try {
       window.protectedGlobals.notificationStack = window.protectedGlobals.notificationStack || [];
       window.protectedGlobals.notificationStack.push({ message: String(message || ''), ts: Date.now() });
@@ -797,12 +797,15 @@
 
   // Also wrap window.alert to record alerts in the stack while keeping existing behavior
   (function wrapAlert() {
-    var origAlert = window.alert && window.alert.bind(window);
+    let origAlert = window.alert && window.alert.bind(window);
     window.alert = function (msg) {
-      try { window.protectedGlobals.notification(String(msg)); } catch (e) {}
-      if (typeof origAlert === 'function') {
-        try { origAlert(String(msg)); } catch (e) { /* ignore */ }
-      }
+      try { window.protectedGlobals.stackNotification(String(msg)); } catch (e) {}
+      origAlert(String(msg));
+    };
+    let origNotification = window.protectedGlobals.notification;
+    window.protectedGlobals.notification = function (msg) {
+      try { window.protectedGlobals.stackNotification(String(msg)); } catch (e) {}
+      origNotification(String(msg));
     };
   })();
 

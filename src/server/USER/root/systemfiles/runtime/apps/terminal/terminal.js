@@ -621,6 +621,21 @@ window.terminal = function (path, posX = 50, posY = 50) {
       return normalizeCloudPath(candidate);
     }
 
+    function getEffectiveMoveTarget(srcPath, destPathCandidate) {
+      const src = normalizeCloudPath(String(srcPath || '/'));
+      const dest = normalizeCloudPath(String(destPathCandidate || src));
+      if (dest === src || dest.startsWith(src + '/')) {
+        const lastSegment = dest.split('/').filter(Boolean).pop() || src.split('/').filter(Boolean).pop() || '';
+        const parent = src.split('/').filter(Boolean);
+        parent.pop();
+        const renameTarget = normalizeCloudPath((parent.length ? '/' + parent.join('/') : '/') + '/' + lastSegment);
+        if (renameTarget !== src && !renameTarget.startsWith(src + '/')) {
+          return renameTarget;
+        }
+      }
+      return dest;
+    }
+
     function toDisplayPath(absPath, baseDir = cwd) {
       const abs = normalizeCloudPath(absPath);
       const base = normalizeCloudPath(String(baseDir || '/'));
@@ -1375,6 +1390,7 @@ window.terminal = function (path, posX = 50, posY = 50) {
         const destArg = tokens.slice(2).join(' ');
         const srcPath = resolveTerminalPath(srcArg, cwd);
         const destPathCandidate = resolveTerminalPath(destArg, cwd);
+        const finalDestPath = getEffectiveMoveTarget(srcPath, destPathCandidate);
         // Check existence
         const srcIsFile = await (window.protectedGlobals.FileExists ? window.protectedGlobals.FileExists(srcPath) : false);
         const srcIsFolder = await (window.protectedGlobals.FolderExists ? window.protectedGlobals.FolderExists(srcPath) : false);
@@ -1383,7 +1399,7 @@ window.terminal = function (path, posX = 50, posY = 50) {
         if (srcIsFile) result = await window.protectedGlobals.PasteFile(destPathCandidate, { path: srcPath, kind: 'file' }, { move: true });
         if (srcIsFolder) result = await window.protectedGlobals.PasteFolder(destPathCandidate, { path: srcPath, kind: 'directory' }, { move: true });
         if (!result.success) { printError(result.error || 'Failed to move file: ' + srcPath); return; }
-        printLine('Moved ' + srcPath + ' -> ' + destPathCandidate);
+        printLine('Moved ' + toDisplayPath(srcPath, cwd) + ' -> ' + toDisplayPath(finalDestPath, cwd));
         return;
       }
 
@@ -1406,13 +1422,14 @@ window.terminal = function (path, posX = 50, posY = 50) {
         try {
           const srcPath = resolveTerminalPath(srcArg, cwd);
           const destPathCandidate = resolveTerminalPath(destArg, cwd);
+          const finalDestPath = getEffectiveMoveTarget(srcPath, destPathCandidate);
           const srcIsFile = await (window.protectedGlobals.FileExists ? window.protectedGlobals.FileExists(srcPath) : false);
           const srcIsFolder = await (window.protectedGlobals.FolderExists ? window.protectedGlobals.FolderExists(srcPath) : false);
           let result;
           if (srcIsFile) result = await window.protectedGlobals.PasteFile(destPathCandidate, { path: srcPath, kind: 'file' });
           if (srcIsFolder) result = await window.protectedGlobals.PasteFolder(destPathCandidate, { path: srcPath, kind: 'directory' });
           if (!result.success) { printError(result.error || 'Failed to copy file: ' + srcPath); return; }
-          printLine('Copied ' + srcPath + ' -> ' + destPathCandidate);
+          printLine('Copied ' + toDisplayPath(srcPath, cwd) + ' -> ' + toDisplayPath(finalDestPath, cwd));
           return;
         } catch (e) { printError(e.message || String(e)); }
         return;

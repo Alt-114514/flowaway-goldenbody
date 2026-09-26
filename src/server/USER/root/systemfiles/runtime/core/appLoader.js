@@ -699,30 +699,58 @@ let getFilesFromFolder = async function (relPath) {
         iframe.src = URL.createObjectURL(blob);
         appObj.allIframe.push(iframe);
         root.appendChild(iframe);
-        let listenerAdded = false;
         let awaitingDlg = false;
-        const pingInterval = setInterval(async () => {
-          if (listenerAdded || awaitingDlg) return;
-          iframe.contentWindow.postMessage({ type: 'ping', channel: appObj.id }, "*");
-          let pongReceived = false;
-          listenerAdded = true;
-          window.addEventListener('message', function (e) {
-            if (e.source !== iframe.contentWindow) {
-              return;
+        let lastPongAt = performance.now();
+        let pageHidden = document.hidden;
+        const visibilityChangeHandler = () => {
+            pageHidden = document.hidden;
+
+            if (!pageHidden) {
+                lastPongAt = performance.now();
             }
-            if (e.data.type === 'pong' && e.data.channel === appObj.id) {
-              pongReceived = true;
-            }
-            listenerAdded = false;
-          }, { once: true });
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          if (!pongReceived) {
+        };
+        document.addEventListener("visibilitychange", visibilityChangeHandler);
+
+        const pongHandler = (e) => {
+          if (e.source !== iframe.contentWindow) return;
+          lastPongAt = performance.now();
+        };
+
+        window.addEventListener("message", pongHandler);
+
+        const pingInterval = setInterval(() => {
+          if (pageHidden) return;
+          // Keep pinging the app once per second.
+          iframe.contentWindow.postMessage({
+            type: "ping",
+            channel: appObj.id
+          }, "*");
+
+          // No pong received from this iframe for 15 seconds.
+          if (
+            !awaitingDlg &&
+            performance.now() - lastPongAt >= 15000
+          ) {
             awaitingDlg = true;
-            const terminate = await window.protectedGlobals.showConfirmDialog("App Unresponsive", `Instance "${instance.title}" (${instanceNum}) of "${entryObj.label}" is not responding.`, "Close App", "Wait");
-            awaitingDlg = false;
-            if (terminate) instance.closeWindow();
+
+            window.protectedGlobals.showConfirmDialog(
+              "App Unresponsive",
+              `Instance "${instance.title}" (${instanceNum}) of "${entryObj.label}" is not responding.`,
+              "Close App",
+              "Wait"
+            ).then((terminate) => {
+              awaitingDlg = false;
+
+              if (terminate) {
+                instance.closeWindow();
+              } else {
+                // Start a fresh 15-second window after choosing Wait.
+                lastPongAt = performance.now();
+              }
+            });
           }
         }, 1000);
+
         window.addEventListener(appObj.id + root.goldenbodyId, 'message', async (e) => {
           if (e.source !== iframe.contentWindow) {
             return;
@@ -852,6 +880,8 @@ let getFilesFromFolder = async function (relPath) {
         instance.closeWindow = function () {
           origClose();
           clearInterval(pingInterval);
+          window.removeEventListener("message", pongHandler);
+          window.removeEventListener("visibilitychange", visibilityChangeHandler);
           appObj.allIframe.splice(appObj.allIframe.indexOf(iframe), 1);
         };
         window.protectedGlobals.apptools.api.trackInstance(instance, entryObj.id);

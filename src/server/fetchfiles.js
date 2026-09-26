@@ -25,10 +25,49 @@ async function move(src, dest) {
     }
   }
 }
+function sendSafeError(res, err, fallbackStatus = 500) {
+  if (res.headersSent) return;
+
+  let status = fallbackStatus;
+  let message = "Operation failed";
+
+  if (err?.code === "EACCES") {
+    status = 403;
+    message = "Permission denied";
+  } else if (err?.code === "ENOENT") {
+    status = 404;
+    message = "File or folder not found";
+  } else if (err?.code === "EEXIST") {
+    status = 409;
+    message = "File or folder already exists";
+  } else if (err?.code === "ENOTDIR") {
+    status = 400;
+    message = "Invalid path";
+  } else if (err?.code === "EINVAL") {
+    status = 400;
+    message = "Invalid operation";
+  } else if (err?.code === "QUOTA_EXCEEDED") {
+    status = 413;
+    message = "Storage quota exceeded";
+  }
+
+  console.error("Filesystem operation failed:", err);
+
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+  });
+
+  res.end(JSON.stringify({
+    error: message,
+  }));
+}
+
 const limit = createLimiter(32);
 function safeResolve(root, userPath = "") {
   const resolvedRoot = path.resolve(root);
-  const resolved = path.resolve(path.join(root, String(userPath)));
+  const raw = String(userPath ?? "");
+  const relative = raw.replace(/\\/g, "/").replace(/^\/+/, "");
+  const resolved = relative ? path.resolve(resolvedRoot, relative) : resolvedRoot;
 
   if (resolved !== resolvedRoot && !resolved.startsWith(resolvedRoot + path.sep)) {
     throw new Error("Invalid path");
@@ -207,6 +246,14 @@ function removeUnwantedStuffInPath(value) {
 function stripLeadingSlash(value) {
   const text = String(value ?? "");
   return text.replace(/^\/+/, "");
+}
+
+function isRootContainerPath(value) {
+  if (value === undefined || value === null) return false;
+  const text = String(value).replace(/\\/g, "/").trim();
+  if (!text || text === "/") return true;
+  const normalized = stripLeadingSlash(text);
+  return normalized === "" || normalized === "root";
 }
 
 function isExistingAppFolderPath(userRoot, normalizedPath) {
@@ -744,6 +791,10 @@ async function handleFetchfiles(req, res) {
             }
 
             if (dir.rename) {
+              if (isRootContainerPath(dir.path)) {
+                throw new Error("Cannot rename the root directory");
+              }
+
               const oldPath = resolvePath(dir.path);
               const oldRel = directionPathToRelative(dir.path || "");
               assertWriteAllowed(oldRel);
@@ -785,6 +836,11 @@ async function handleFetchfiles(req, res) {
             }
 
             if (dir.delete) {
+              if (isRootContainerPath(dir.path)) {
+                success = false;
+                continue;
+              }
+
               const deleteRelPath = directionPathToRelative(dir.path || "");
               assertWriteAllowed(deleteRelPath);
               const targetPath = resolvePath(dir.path);
@@ -883,14 +939,21 @@ async function handleFetchfiles(req, res) {
             }
 
             if (dir.copy) {
-              // Expect a single clipboard object (no arrays).
               const entry = dir.directions;
-              if (!entry || Array.isArray(entry)) {
-                throw new Error("Invalid clipboard entry: expected single object");
+
+              if (typeof entry === "string") {
+                const copyRelPath = removeUnwantedStuffInPath(entry);
+                assertReadAllowed(copyRelPath);
+                clipboard = { path: copyRelPath, kind: "file", type: "file" };
+                continue;
               }
+
+              if (!entry || Array.isArray(entry) || typeof entry !== "object") {
+                throw new Error("Invalid clipboard entry: expected a path string or single object");
+              }
+
               const copyRelPath = removeUnwantedStuffInPath(entry && entry.path ? entry.path : "");
               assertReadAllowed(copyRelPath);
-              // Store the single object to clipboard; copy will be performed at paste time
               clipboard = entry;
               continue;
             }
@@ -899,6 +962,11 @@ async function handleFetchfiles(req, res) {
               dir.paste = true;
             }
             if (dir.paste && clipboard) {
+              if (isRootContainerPath(dir.path) || isRootContainerPath(clipboard.path)) {
+                success = false;
+                continue;
+              }
+
               const destinationRelPath = directionPathToRelative(dir.path || "root");
               assertWriteAllowed(destinationRelPath);
 
@@ -936,6 +1004,20 @@ async function handleFetchfiles(req, res) {
               // New behavior: paste/move should place source at the destination path directly
               // and must fail if the destination already exists.
               let dest = destinationPath;
+              const normalizedSrc = path.resolve(src);
+              const normalizedDest = path.resolve(dest);
+
+              // A move like "mv . __pub2" is represented as a target nested under the source
+              // path (source/current-dir + new name). In that case, we must treat it as a
+              // rename of the source to its parent directory with the requested basename.
+              if (normalizedDest === normalizedSrc || normalizedDest.startsWith(normalizedSrc + path.sep)) {
+                const requestedName = path.basename(normalizedDest) || path.basename(normalizedSrc);
+                const renameTarget = path.resolve(path.dirname(normalizedSrc), requestedName);
+                if (renameTarget !== normalizedSrc && !renameTarget.startsWith(normalizedSrc + path.sep)) {
+                  dest = renameTarget;
+                }
+              }
+
               // Ensure parent directory exists
               const parentDir = path.dirname(dest);
               await ensureDir(parentDir);
@@ -961,9 +1043,9 @@ async function handleFetchfiles(req, res) {
               const moveFlag = Boolean(dir.move ?? moveMode);
               if (moveFlag) {
                 try {
-                  const normalizedSrc = path.resolve(src);
-                  const normalizedDest = path.resolve(dest);
-                  if (normalizedDest.startsWith(normalizedSrc + path.sep) || normalizedDest === normalizedSrc) {
+                  const normalizedSrcAfter = path.resolve(src);
+                  const normalizedDestAfter = path.resolve(dest);
+                  if (normalizedDestAfter.startsWith(normalizedSrcAfter + path.sep) || normalizedDestAfter === normalizedSrcAfter) {
                     success = false;
                   } else {
                     await deletePathWithQuota(username, userRoot, src);
@@ -1031,22 +1113,7 @@ async function handleFetchfiles(req, res) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: "Unknown action" }));
       } catch (err) {
-        console.error(err);
-        if (res.headersSent) return;
-        if (err && err.code === "EACCES") {
-          res.writeHead(403);
-          return res.end(JSON.stringify({ error: err.message, path: err.path }));
-        }
-        if (err && err.code === "EINVAL") {
-          res.writeHead(400);
-          return res.end(JSON.stringify({ error: err.message }));
-        }
-        if (err && err.code === "ENOENT" && err.path) {
-          res.writeHead(400);
-          return res.end(JSON.stringify({ error: err.message, path: err.path }));
-        }
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: err.message }));
+        sendSafeError(res, err);
       }
   });
 }
