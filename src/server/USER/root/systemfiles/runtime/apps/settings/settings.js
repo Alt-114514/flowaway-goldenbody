@@ -1705,14 +1705,12 @@ window.settings = function (posX = 50, posY = 50) {
 </p>
 <pre><code>window[entryObj.functionName] = async function(path, verify, argObj, posX = 50, posY = 50) { ... }</code></pre>
 <p>
-    Pass structured input via <code>argObj</code>. The loader injects <code>window.__args</code>,
-    <code>window.__path__</code>, and <code>window.__filehandle__</code> into the iframe so your app can read them at
-    startup. Example:
+    Pass structured input via <code>argObj</code>. The loader injects <code>window.__args</code> into the iframe, so the app can read it. For example, if you launch an app with:
 </p>
-<pre><code>// launch an app and pass args await __goldenbodyAPI.launchApp('myApp', [{ view: 'recent', id: 42 }]);
+<pre><code>// launch an app and pass args await __goldenbodyAPI.launchApp('myApp', [{ view: 'recent', id: 42 }, { obj2: 'favorites' }]);
 
 // inside iframe script
-const args = window.__args; // { view: 'recent', id: 42 }
+const args = window.__args; // [{ view: 'recent', id: 42 }, { obj2: 'favorites' }]
 </code></pre>
 <h3>Background worker apps</h3>
 <p>
@@ -1726,14 +1724,10 @@ const args = window.__args; // { view: 'recent', id: 42 }
     <code>new Worker(url, { name: entryObj.headlessJsFile, source: entryObj.id })</code>, so it can live independently
     from the iframe. This pattern is used for long-running helper workers, polling loops, or OS-like background
     services.
+    The worker is not allowed to interact with anything in the VFS, it can only complete communication by sharing a server with the main app instance and use the 3rd party server as a bridge.
+    It may also choose to use minimized or 0 by 0 windows at startup to stimulate a background service, but the service requires a user interation (launch the app in file explorer by opening a file or terminal) to start.
 </p>
-<pre><code>(async () =&gt; { await api.writeline('Worker booted'); self.addEventListener('message', async (event) =&gt; { const data = event.data || {}; if (data.type === 'onkill') { await api.writeline('shutting down'); self.close(); } });
 
-while (true) {
-await api.writeline('heartbeat');
-await new Promise((resolve) => setTimeout(resolve, 5000));
-}
-})();</code></pre>
 <h3>Admin app GUI framework</h3>
 <p>
     Admin apps can build their window looks through <code>window.protectedGlobals.apptools</code>, which is initialized
@@ -1741,7 +1735,6 @@ await new Promise((resolve) => setTimeout(resolve, 5000));
 </p>
 <ol>
     <li>Create an app instance with <code>window.protectedGlobals.apptools.api.createAppInstance({...})</code>.</li>
-    <li>Attach a title bar with <code>window.protectedGlobals.apptools.createtitlebar(root)</code>.</li>
     <li>
         Register the instance with <code>window.protectedGlobals.apptools.api.trackInstance(instance, appId)</code> so
         maximize/minimize/show/hide/close state is tracked by the runtime.
@@ -1753,7 +1746,7 @@ window.myadminapp = () => {
 // necessary for the runtime to track this app instance
 const appId = "myAdminApp";
 let pos = window.protectedGlobals.getNextWindowXY();
-const instance = window.protectedGlobals.apptools.api.createAppInstance({ appId, posX: pos.x, posY: pos.y });
+const instance = window.protectedGlobals.apptools.api.createAppInstance({ appId, posX, posY, width: appWidth, height: appHeight, maximize: windowMaximize, minimize: windowMinimize });
 window.protectedGlobals.apptools.api.trackInstance(instance, appId);
 
 // vars u prob need
@@ -1803,7 +1796,6 @@ let dragTarget = instance.titlebarElement;
 <pre
     style="
         white-space: pre-wrap;
-        background: #f6f6f6;
         padding: 8px;
         border-radius: 6px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
@@ -1823,7 +1815,6 @@ const cwd = api.cwd(); // cwd.relative -> './data' (user-facing) // cwd.full -> 
 <pre
     style="
         white-space: pre-wrap;
-        background: #f6f6f6;
         padding: 8px;
         border-radius: 6px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
@@ -1895,17 +1886,6 @@ const edited = await api.prompt('Edit file contents', { prefill: existingText, m
     <code>postMessage({ type: 'log' })</code>, <code>postMessage({ type: 'done' })</code>,
     <code>postMessage({ type: 'api' })</code>, and the terminal line helpers to render output or request file actions.
 </p>
-<h3>Headless app fields</h3>
-<ul>
-    <li><code>functionName</code> - globally exported launch function that the runtime calls.</li>
-    <li><code>globalVarObjectString</code> - name of the global object for app instances.</li>
-    <li><code>allAppArrayString</code> - array name under the global object for tracking instances.</li>
-    <li><code>cmf</code> and <code>cmfl1</code> - app btn contextmenu hooks. (i personally think its useless)</li>
-    <li>
-        <code>headless</code> - if you have this on, the app will only run in the background, it will be ignored if you
-        have the <code>icon</code> entry in the json file.
-    </li>
-</ul>
 <h2>Iframe App API</h2>
 <h3>Iframe API reference</h3>
 <p>
@@ -1963,7 +1943,6 @@ const edited = await api.prompt('Edit file contents', { prefill: existingText, m
 <pre
     style="
         white-space: pre-wrap;
-        background: #f6f6f6;
         padding: 8px;
         border-radius: 6px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
@@ -2077,15 +2056,15 @@ await window.__goldenbodyAPI.setBounds({ minimize: true });
     </li>
 </ol>
 <h4>ReadFile (options and patterns)</h4>
-<p>Signature: <code>readFile(pathOrHandle, options)</code>. Options (mutually exclusive):</p>
+<p>Signature: <code>readFile(pathOrHandle, options)</code>. Options (mutually exclusive except direct):</p>
 <ul>
     <li><code>{ text: true }</code> — returns the file as UTF-8 text (string).</li>
     <li><code>{ buffer: true }</code> — returns an ArrayBuffer.</li>
     <li><code>{ stream: true }</code> — returns a ReadableStream for incremental reads.</li>
-    <li><code>{ direct: true }</code> — return raw response value (used internally).</li>
+    <li><code>{ direct: true }</code> — return raw response value.</li>
 </ul>
 <p>Example (simple):</p>
-<pre><code>const { fileSize, filecontent } = await window.__goldenbodyAPI.readFile('/root/doc.txt', { text: true }); console.log('size', fileSize, 'contents', filecontent);</code></pre>
+<pre><code>const { fileSize, fileContent } = await window.__goldenbodyAPI.readFile('/root/doc.txt', { text: true }); console.log('size', fileSize, 'contents', fileContent);</code></pre>
 <p>Example (streaming large files):</p>
 <pre><code>const stream = await window.__goldenbodyAPI.readFile('/root/big.bin', { stream: true }); const reader = stream.getReader(); let received = 0; while (true) { const { done, value } = await reader.read(); if (done) break; received += value.byteLength; // process chunk } console.log('received', received);</code></pre>
 <h4>WriteFile (options, chunking, and retries)</h4>

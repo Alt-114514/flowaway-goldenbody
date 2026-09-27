@@ -184,7 +184,7 @@ function handleZMCd(req, res) {
       const userPaths = getUserPaths(data.username);
 
       if (data.needNewAcc) {
-        if (!/^[a-zA-Z0-9_-]+$/.test(data.username) || data.username.length < 3 || password.length < 3) {
+        if (!/^[a-zA-Z0-9_-]+$/.test(data.username) || data.username.length < 3 || password.length < 3 || password.length > 20 || data.username.length > 20) {
           return sendJson(res, 403, { error: "Username or password don't meet server requirements" });
         }
         if (fs.existsSync(userPaths.userDir) || fs.existsSync(userPaths.authFile)) {
@@ -294,7 +294,9 @@ function handleZMCd(req, res) {
         if (typeof data.oldPassword !== 'string' || data.oldPassword !== authRecord.password) {
           return sendJson(res, 400, { error: 'old password is wrong' });
         }
-
+        if (data.newPassword.length < 3 || data.newPassword.length > 20) {
+          return sendJson(res, 400, { error: 'new password must be between 3 and 20 characters' });
+        }
         authRecord.password = String(data.newPassword || '');
         authRecord.authTokens = [];
         const newToken = issueToken(authRecord);

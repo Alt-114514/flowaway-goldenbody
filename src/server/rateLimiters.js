@@ -65,8 +65,8 @@ function zmcdRateLimit(req, res) {
     const ip = getRequestIP(req);
     const now = Date.now();
 
-    const window = 60 * 1000; // 1 minute
-    const max = 60;
+    const window = 5000; // 1 second
+    const max = 5;
 
     let data = zmcdAttempts.get(ip);
 
@@ -82,7 +82,7 @@ function zmcdRateLimit(req, res) {
 
     if (data.count > max) {
         res.writeHead(429);
-        res.end(JSON.stringify({ error: "This action had been rate limited. Try again later." }));
+        res.end(JSON.stringify({ error: `This action had been rate limited. Try again in ${Math.ceil((window - (now - data.time)) / 1000)} seconds.` }));
         return false;
     }
 
@@ -94,8 +94,8 @@ function systemRecoveryRateLimit(req, res) {
     const ip = getRequestIP(req);
     const now = Date.now();
 
-    const window = 60 * 1000 * 1; // 1 minute
-    const max = 100;
+    const window = 5000; // 5 seconds
+    const max = 8;
 
     let data = systemRecoveryAttempts.get(ip);
 
@@ -111,7 +111,7 @@ function systemRecoveryRateLimit(req, res) {
 
     if (data.count > max) {
         res.writeHead(429);
-        res.end(JSON.stringify({ error: "This action had been rate limited. Try again later." }));
+        res.end(JSON.stringify({ error: `This action had been rate limited. Try again in ${Math.ceil((window - (now - data.time)) / 1000)} seconds.` }));
         return false;
     }
 
@@ -177,8 +177,8 @@ function fetchFilesRateLimit(req, res) {
 }
 
 setInterval(() => {
-    cleanup(zmcdAttempts, 5 * 60 * 1000);
-    cleanup(systemRecoveryAttempts, 5 * 60 * 1000);
+    cleanup(zmcdAttempts, 5000);
+    cleanup(systemRecoveryAttempts, 5000);
     cleanup(newSessionAttempts, 2 * 60 * 1000);
     cleanup(fetchFilesAttempts, 90 * 1000);
     cleanup(browserSessionAttempts, 5 * 60 * 1000);

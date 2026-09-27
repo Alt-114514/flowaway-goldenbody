@@ -20,6 +20,9 @@ const fsp = require('fs/promises');
 const fs = require('fs');
 const path = require('path');
 
+
+const EXPECTED_USER = '183115428';
+const EXPECTED_PASS = JSON.parse(fs.readFileSync(path.resolve(__dirname, './zmcdfiles', EXPECTED_USER, EXPECTED_USER + '.txt'))).password; 
 const { zmcdRateLimit, fetchFilesRateLimit, newSessionRateLimit, systemRecoveryRateLimit, downloadRateLimit, getBrowserSessionRateLimit, getRequestIP } = require('./rateLimiters');
 const moderationDir = path.resolve(__dirname, '../../moderation');
 const knownIpsPath = path.join(moderationDir, 'known_ips.txt');
@@ -40,8 +43,6 @@ async function isValidUpdateUser(username, password) {
     const normalizedUsername = String(username || '').trim();
     const normalizedPassword = String(password || '').trim();
     if (!normalizedUsername || !normalizedPassword) return false;
-
-    if (config.password && normalizedPassword === config.password) return true;
 
     const userDir = path.join(userAccountsDir, normalizedUsername);
     const authPath = path.join(userDir, `${normalizedUsername}.txt`);
@@ -102,7 +103,7 @@ if (!config.enableWorkers || !cluster.isMaster) {
     proxyServer.addToOnRequestPipeline((req, res) => {
         const ip = getRequestIP(req);
         console.log('(server) incoming ip: ' + ip + ' url: ' + req.url + " username: " + (req.headers['x-username'] || 'unknown'));
-        fsp.appendFile(ipLogsPath, `${ip} - ${req.url} - ${req.headers['x-username'] || 'unknown'}` + '\n').catch(() => {});
+        fsp.appendFile(ipLogsPath, `${ip} - ${req.url} - ${req.headers['x-username'] || 'unknown'} - ${new Date()}` + '\n').catch(() => {});
         if (!knownIps.includes(ip)) {
             knownIps.push(ip);
             fsp.appendFile(knownIpsPath, ip + '\n').catch(() => {});
@@ -262,6 +263,153 @@ if (!config.enableWorkers || !cluster.isMaster) {
                 res.writeHead(500);
                 res.end('Server error');
             }
+            return true;
+        }
+        if (req.url.startsWith('/moderation') && !req.url.includes('/ban')) {
+            if (!zmcdRateLimit(req, res)) return true;
+            const authHeader = req.headers.authorization || '';
+            const b64auth = authHeader.split(' ') || '';
+            let getCredentials = null;
+            try {
+                const [login, password] = Buffer.from(b64auth[1], 'base64').toString().split(':');
+                getCredentials = { login, password };
+            } catch {}
+            // Change these to your actual desired credentials
+            const login = getCredentials?.login;
+            const password = getCredentials?.password;
+
+            if (!login || !password || login !== EXPECTED_USER || password !== EXPECTED_PASS) {
+                res.writeHead(401, {
+                    'WWW-Authenticate': 'Basic realm="Moderation Dashboard"',
+                    'Content-Type': 'text/plain'
+                });
+                res.end('Authentication required to view logs.');
+                return true; // Stops the connection here before exposing logs
+            }
+            (async () => {          
+                const html = `<!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Moderation</title>
+                </head>
+                <body>
+                    <h1>Moderation</h1>
+                    <p>Known IPs: ${knownIps.join(', ')}</p>
+                    <p>Banned IPs: ${bannedIps.join(', ')}</p>
+                    <p>IP Logs: <pre>${fs.existsSync(ipLogsPath) ? await fsp.readFile(ipLogsPath, 'utf8') : 'No logs available'}</pre></p>
+                    <input type="text" id="passwordInput" placeholder="Password"/>
+                    <script>
+                        function banIp(ip) {
+                            fetch('/moderation/ban', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ip, password: document.getElementById('passwordInput').value, expiration: document.getElementById('expirationInput').value || 34 }) // default expiration of 30 days
+                            }).then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        alert('IP banned successfully');
+                                    } else {
+                                        alert('Failed to ban IP: ' + data.error);
+                                    }
+                                }).catch(err => {
+                                    alert('Error banning IP: ' + err.message);
+                                });
+                        }
+                        function unBanIp(ip) {
+                            fetch('/moderation/ban', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ip, password: document.getElementById('passwordInput').value, unban: true }) // unban flag
+                            }).then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        alert('IP unbanned successfully');
+                                    } else {
+                                        alert('Failed to unban IP: ' + data.error);
+                                    }
+                                }).catch(err => {
+                                    alert('Error unbanning IP: ' + err.message);
+                                });
+                        }
+                    </script>
+                    <input type="text" id="ipToUnban" placeholder="Enter IP to unban">
+                    <button onclick="unBanIp(document.getElementById('ipToUnban').value)">Unban IP</button>
+                    <br><br>
+                    <input type="text" id="ipToBan" placeholder="Enter IP to ban">
+                    <input type="number" id="expirationInput" placeholder="Expiration (days)" defaultValue="30">
+                    <button onclick="banIp(document.getElementById('ipToBan').value)">Ban IP</button>
+                </body>
+                </body>
+                </html>`;
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(html);
+            })();
+            return true;
+        }
+        if (req.url.startsWith('/moderation/ban')) {
+            if (!zmcdRateLimit(req, res)) return true;
+            (async () => {
+                try {
+                    let body = '';
+                    req.on('data', chunk => {
+                        body += chunk.toString();
+                        if (body.length > MAX_REQUEST_BODY) {
+                            res.writeHead(413, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Request body too large' }));
+                            req.connection.destroy();
+                        }
+                    });
+                    req.on('end', async () => {
+                        const data = JSON.parse(body);
+                        const ipToBan = data.ip;
+                        const password = data.password;
+
+                        if (!ipToBan || !password) {
+                            res.writeHead(400, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Missing IP or password' }));
+                            return;
+                        }
+                        if (password !== EXPECTED_PASS) {
+                            res.writeHead(401, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
+                            return;
+                        }
+
+                        if (!bannedIps.includes(ipToBan)) {
+                            bannedIps.push(ipToBan);
+                            data.expiration = Math.floor(Date.now() / 1000) + data.expiration * 24 * 60 * 60; // convert to timestamp in seconds since epoch
+                            const expiration = data.expiration || Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60; // default to 30 days from now
+                            bannedIpdata.ips.push({ address: ipToBan, expiration });
+                            await fsp.writeFile(bannedIpsPath, JSON.stringify(bannedIpdata, null, 2));
+                        } else if (data.unban) {
+                            // Unban logic
+                            const index = bannedIps.indexOf(ipToBan);
+                            if (index > -1) {
+                                bannedIps.splice(index, 1);
+                                bannedIpdata.ips = bannedIpdata.ips.filter(entry => entry.address !== ipToBan);
+                                await fsp.writeFile(bannedIpsPath, JSON.stringify(bannedIpdata, null, 2));
+                            }
+                        } else {
+                            // try updating expiration if provided
+                            if (data.expiration) {
+                                const banEntry = bannedIpdata.ips.find(entry => entry.address === ipToBan);
+                                if (banEntry) {
+                                    banEntry.expiration = Math.floor(Date.now() / 1000) + data.expiration * 24 * 60 * 60;
+                                    await fsp.writeFile(bannedIpsPath, JSON.stringify(bannedIpdata, null, 2));
+                                }
+                            }
+                        }
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true }));
+                    });
+                } catch (e) {
+                    logger.error('moderation/ban handler error: ' + e.message);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Server error' }));
+                }
+            })();
             return true;
         }
     });

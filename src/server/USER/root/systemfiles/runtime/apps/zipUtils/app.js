@@ -454,7 +454,7 @@ async function createZip(sourceHandle, sourceType) {
 
                 const data =
                     new Uint8Array(
-                        fileResult.filecontent ||
+                        fileResult.fileContent ||
                         fileResult
                     );
 
@@ -526,7 +526,7 @@ async function createZip(sourceHandle, sourceType) {
 
         const data =
             new Uint8Array(
-                fileResult.filecontent ||
+                fileResult.fileContent ||
                 fileResult
             );
 
@@ -1076,7 +1076,7 @@ async function extractZip(
 
     const bytes =
         new Uint8Array(
-            result.filecontent || result
+            result.fileContent || result
         );
 
     const entries =

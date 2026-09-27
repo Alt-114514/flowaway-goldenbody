@@ -335,7 +335,7 @@ window.terminal = function (path, posX = 50, posY = 50) {
           }
           const remainingMs = Math.max(0, terminalWorkerGracefulKillDeadline - Date.now());
           const remainingSeconds = Math.min(3, Math.max(1, Math.ceil(remainingMs / 1000)));
-          printLine(`Graceful shutdown already started; terminating in ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}.`);
+          printLine(`terminating in ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}.`);
           return;
         }
 

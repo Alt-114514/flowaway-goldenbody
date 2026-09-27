@@ -499,7 +499,7 @@ await window.__goldenbodyAPI.setBounds({ minimize: true });
     <li><code>{ direct: true }</code> — return raw response value (used internally).</li>
 </ul>
 <p>Example (simple):</p>
-<pre><code>const { fileSize, filecontent } = await window.__goldenbodyAPI.readFile('/root/doc.txt', { text: true }); console.log('size', fileSize, 'contents', filecontent);</code></pre>
+<pre><code>const { fileSize, fileContent } = await window.__goldenbodyAPI.readFile('/root/doc.txt', { text: true }); console.log('size', fileSize, 'contents', fileContent);</code></pre>
 <p>Example (streaming large files):</p>
 <pre><code>const stream = await window.__goldenbodyAPI.readFile('/root/big.bin', { stream: true }); const reader = stream.getReader(); let received = 0; while (true) { const { done, value } = await reader.read(); if (done) break; received += value.byteLength; // process chunk } console.log('received', received);</code></pre>
 <h4>WriteFile (options, chunking, and retries)</h4>

@@ -132,3 +132,6 @@
 
 ## V 2.3.4
 - fixed a paste file bug last update introduced, reworked how server bans work
+
+## V 2.3.5
+- Added moderator ban panel

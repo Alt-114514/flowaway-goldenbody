@@ -3777,7 +3777,7 @@ setTimeout(() => {
         throw new Error("Path points to a folder");
       }
       if (!(response instanceof ArrayBuffer)) {
-        response = response.filecontent;
+        response = response.fileContent;
       }
       const buffer = response instanceof ArrayBuffer
         ? response

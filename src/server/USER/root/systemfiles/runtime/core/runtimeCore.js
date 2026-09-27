@@ -167,22 +167,22 @@ window.protectedGlobals.ReadFile = async function (
 
   const fileSize = Number(response.headers.get("content-length") || 0);
 
-  let filecontent = null;
+  let fileContent = null;
   if (isBuffer) {
-    filecontent = await response.arrayBuffer();
+    fileContent = await response.arrayBuffer();
   } else if (isText) {
-    filecontent = await response.text();
+    fileContent = await response.text();
   } else {
-    filecontent = response.body;
+    fileContent = response.body;
   }
 
   if (options.direct) {
-    return filecontent;
+    return fileContent;
   }
 
   return {
     fileSize,
-    filecontent,
+    fileContent,
   };
 };
 window.protectedGlobals.ReadFolder = async function (relPath, options = { detail: false, directoryDetail: false }) {
