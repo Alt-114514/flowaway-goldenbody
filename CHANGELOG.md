@@ -135,3 +135,6 @@
 
 ## V 2.3.5
 - Added moderator ban panel
+
+## V 2.4.0
+- Added desktop shortcuts (major feature)

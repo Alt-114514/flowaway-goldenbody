@@ -457,6 +457,16 @@ window.protectedGlobals.showUnifiedAppContextMenu = function (e,   appOverride =
   });
   menu.appendChild(newWindow);
 
+  const createShortcut = document.createElement("div");
+  createShortcut.textContent = "Create Shortcut";
+  createShortcut.style.padding = "6px 10px";
+  createShortcut.style.cursor = "pointer";
+  createShortcut.addEventListener("click", async () => {
+    await window.protectedGlobals.createDesktopShortcutForApp(app);
+    menu.remove();
+  });
+  menu.appendChild(createShortcut);
+
     const appId = app.id;
     const existingBtn = document.querySelector(
       `button.taskbutton[data-app-id="${appId}"]`,

@@ -1038,6 +1038,7 @@ let getFilesFromFolder = async function (relPath) {
       pngEnabled: !!entryObj.pngEnabled,
       openfileCapability: openfileCapability,
       commands: entryObj._cmds || [],
+      createShortcutUponInstallation: !!entryObj.createShortcutUponInstallation,
     };
     let getPkg = () => {
       return pkg;

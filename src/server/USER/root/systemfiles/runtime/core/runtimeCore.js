@@ -786,6 +786,7 @@ window.tmpGlobals.coreScriptUrls = [
   "systemfiles/runtime/core/appLoader.js",
   "systemfiles/runtime/helpers/initapptools.js",
   "systemfiles/runtime/core/startMenu.js",
+  "systemfiles/runtime/core/desktop.js",
   "systemfiles/runtime/core/goldenbody.js"
 ];
 window.tmpGlobals.coreESMUrls = [
@@ -1044,7 +1045,11 @@ document.addEventListener("keydown", (e) => {
 
 
 window.protectedGlobals.deleteApp = async function (obj, cleanupOnly = false) {
-  if (!cleanupOnly) await window.protectedGlobals.DeleteFolder(`/systemfiles/runtime/apps/${obj.folderName}`);
+  if (!obj) return;
+  if (!cleanupOnly) {
+    await window.protectedGlobals.DeleteFolder(`/systemfiles/runtime/apps/${obj.folderName}`);
+    await window.protectedGlobals.removeShortcutsForApp(obj.id || obj.folderName || "").catch(() => {});
+  }
   for (const element of window.protectedGlobals.apps) {
     if (element.id == obj.id) {
       try {
@@ -1083,6 +1088,13 @@ window.protectedGlobals.deleteApp = async function (obj, cleanupOnly = false) {
 window.protectedGlobals.installApp = async function (folderName, options = {}) {
   if (options.update) {
     let targetApp = window.protectedGlobals.apps.find((a) => a.folderName === folderName);
+    if (!targetApp) {
+      // perform a search in the app dir
+      const entries = await window.protectedGlobals.ReadFolder("/systemfiles/runtime/apps").catch(() => []);
+      const targetAppfoldername = entries.find((e) => e === folderName);
+      const targetAppId = JSON.parse(await window.protectedGlobals.ReadFile(`/systemfiles/runtime/apps/${targetAppfoldername}/entry.json`, { text: true, direct: true }))?.id;
+      targetApp = window.protectedGlobals.apps.find((a) => a.id === targetAppId);
+    }
     window.protectedGlobals.deleteApp(targetApp, true);
   }
   await window.protectedGlobals.onlyloadTree();
@@ -1106,6 +1118,9 @@ window.protectedGlobals.installApp = async function (folderName, options = {}) {
         window.protectedGlobals.apps.sort((a, b) => a.label.localeCompare(b.label));
         window.protectedGlobals.initAppRuntimeState(appData);
         window.protectedGlobals.apps.push(appData);
+        if (appData.createShortcutUponInstallation && !options.update) {
+          await window.protectedGlobals.createDesktopShortcutForApp(appData);
+        }
       }
   }
   window.protectedGlobals.renderAppsGrid();

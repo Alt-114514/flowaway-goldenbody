@@ -16,6 +16,7 @@ This is copied directly from the dev docs in the settings app
     <li><code>label</code> - display name for the app.</li>
     <li><code>iconFile</code> - icon asset path relative to the app folder.</li>
     <li><code>pngEnabled</code> - boolean flag to render <code>iconFile</code> as a PNG image.</li>
+    <li><code>createShortcutUponInstallation</code> - boolean flag to create a desktop shortcut when the app is installed.</li>
     <li>
         <code>startupPos</code> - (Iframe Apps Only) optional object controlling the initial window placement/size. Use
         <code>{ x, y, width, height, maximize, minimize }</code> to position and size the window when the app is first launched (each
@@ -119,14 +120,12 @@ This is copied directly from the dev docs in the settings app
 </p>
 <pre><code>window[entryObj.functionName] = async function(path, verify, argObj, posX = 50, posY = 50) { ... }</code></pre>
 <p>
-    Pass structured input via <code>argObj</code>. The loader injects <code>window.__args</code>,
-    <code>window.__path__</code>, and <code>window.__filehandle__</code> into the iframe so your app can read them at
-    startup. Example:
+    Pass structured input via <code>argObj</code>. The loader injects <code>window.__args</code> into the iframe, so the app can read it. For example, if you launch an app with:
 </p>
-<pre><code>// launch an app and pass args await __goldenbodyAPI.launchApp('myApp', [{ view: 'recent', id: 42 }]);
+<pre><code>// launch an app and pass args await __goldenbodyAPI.launchApp('myApp', [{ view: 'recent', id: 42 }, { obj2: 'favorites' }]);
 
 // inside iframe script
-const args = window.__args; // { view: 'recent', id: 42 }
+const args = window.__args; // [{ view: 'recent', id: 42 }, { obj2: 'favorites' }]
 </code></pre>
 <h3>Background worker apps</h3>
 <p>
@@ -140,14 +139,10 @@ const args = window.__args; // { view: 'recent', id: 42 }
     <code>new Worker(url, { name: entryObj.headlessJsFile, source: entryObj.id })</code>, so it can live independently
     from the iframe. This pattern is used for long-running helper workers, polling loops, or OS-like background
     services.
+    The worker is not allowed to interact with anything in the VFS, it can only complete communication by sharing a server with the main app instance and use the 3rd party server as a bridge.
+    It may also choose to use minimized or 0 by 0 windows at startup to stimulate a background service, but the service requires a user interation (launch the app in file explorer by opening a file or terminal) to start.
 </p>
-<pre><code>(async () =&gt; { await api.writeline('Worker booted'); self.addEventListener('message', async (event) =&gt; { const data = event.data || {}; if (data.type === 'onkill') { await api.writeline('shutting down'); self.close(); } });
 
-while (true) {
-await api.writeline('heartbeat');
-await new Promise((resolve) => setTimeout(resolve, 5000));
-}
-})();</code></pre>
 <h3>Admin app GUI framework</h3>
 <p>
     Admin apps can build their window looks through <code>window.protectedGlobals.apptools</code>, which is initialized
@@ -155,7 +150,6 @@ await new Promise((resolve) => setTimeout(resolve, 5000));
 </p>
 <ol>
     <li>Create an app instance with <code>window.protectedGlobals.apptools.api.createAppInstance({...})</code>.</li>
-    <li>Attach a title bar with <code>window.protectedGlobals.apptools.createtitlebar(root)</code>.</li>
     <li>
         Register the instance with <code>window.protectedGlobals.apptools.api.trackInstance(instance, appId)</code> so
         maximize/minimize/show/hide/close state is tracked by the runtime.
@@ -167,7 +161,7 @@ window.myadminapp = () => {
 // necessary for the runtime to track this app instance
 const appId = "myAdminApp";
 let pos = window.protectedGlobals.getNextWindowXY();
-const instance = window.protectedGlobals.apptools.api.createAppInstance({ appId, posX: pos.x, posY: pos.y });
+const instance = window.protectedGlobals.apptools.api.createAppInstance({ appId, posX, posY, width: appWidth, height: appHeight, maximize: windowMaximize, minimize: windowMinimize });
 window.protectedGlobals.apptools.api.trackInstance(instance, appId);
 
 // vars u prob need
@@ -217,7 +211,6 @@ let dragTarget = instance.titlebarElement;
 <pre
     style="
         white-space: pre-wrap;
-        background: #f6f6f6;
         padding: 8px;
         border-radius: 6px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
@@ -237,7 +230,6 @@ const cwd = api.cwd(); // cwd.relative -> './data' (user-facing) // cwd.full -> 
 <pre
     style="
         white-space: pre-wrap;
-        background: #f6f6f6;
         padding: 8px;
         border-radius: 6px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
@@ -309,17 +301,6 @@ const edited = await api.prompt('Edit file contents', { prefill: existingText, m
     <code>postMessage({ type: 'log' })</code>, <code>postMessage({ type: 'done' })</code>,
     <code>postMessage({ type: 'api' })</code>, and the terminal line helpers to render output or request file actions.
 </p>
-<h3>Headless app fields</h3>
-<ul>
-    <li><code>functionName</code> - globally exported launch function that the runtime calls.</li>
-    <li><code>globalVarObjectString</code> - name of the global object for app instances.</li>
-    <li><code>allAppArrayString</code> - array name under the global object for tracking instances.</li>
-    <li><code>cmf</code> and <code>cmfl1</code> - app btn contextmenu hooks. (i personally think its useless)</li>
-    <li>
-        <code>headless</code> - if you have this on, the app will only run in the background, it will be ignored if you
-        have the <code>icon</code> entry in the json file.
-    </li>
-</ul>
 <h2>Iframe App API</h2>
 <h3>Iframe API reference</h3>
 <p>
@@ -377,7 +358,6 @@ const edited = await api.prompt('Edit file contents', { prefill: existingText, m
 <pre
     style="
         white-space: pre-wrap;
-        background: #f6f6f6;
         padding: 8px;
         border-radius: 6px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
@@ -491,12 +471,12 @@ await window.__goldenbodyAPI.setBounds({ minimize: true });
     </li>
 </ol>
 <h4>ReadFile (options and patterns)</h4>
-<p>Signature: <code>readFile(pathOrHandle, options)</code>. Options (mutually exclusive):</p>
+<p>Signature: <code>readFile(pathOrHandle, options)</code>. Options (mutually exclusive except direct):</p>
 <ul>
     <li><code>{ text: true }</code> — returns the file as UTF-8 text (string).</li>
     <li><code>{ buffer: true }</code> — returns an ArrayBuffer.</li>
     <li><code>{ stream: true }</code> — returns a ReadableStream for incremental reads.</li>
-    <li><code>{ direct: true }</code> — return raw response value (used internally).</li>
+    <li><code>{ direct: true }</code> — return raw response value.</li>
 </ul>
 <p>Example (simple):</p>
 <pre><code>const { fileSize, fileContent } = await window.__goldenbodyAPI.readFile('/root/doc.txt', { text: true }); console.log('size', fileSize, 'contents', fileContent);</code></pre>
@@ -746,11 +726,11 @@ clipboard
     how the client behaves. If you break it, you can restore the system tree from the login page and remove broken
     non-system apps there. A copy of broken files will also be stored in your cloud storage.
 </p>
-## QUICK DEV & RUN
+
+## BACKEND SERVER ADMIN SETUP
 
 - Requirements: Node.js (latest recommended, v24+). IDK if bun works... prob not.
 - Install libraries/dependencies the server (aka. the rammerhead server) needs via npm install:
-
 ```bash
 npm install
 ```
@@ -771,7 +751,7 @@ node src/server.js
 npm start
 ```
 
-
+- You need to make an account named 183115428 as that is the server admin account. Its password is used to ban IPs in http(s)://your-url.ext/moderation (localhost: http://localhost:8080/moderation)
 - THE BACKEND IS BASED ON ""aka (copied from)"" RAMMERHEAD SINCE THE PURPOSE OF THIS THING USED TO BE A PROXY:
 - Configure Rammerhead `src/config.js` to override defaults.
 

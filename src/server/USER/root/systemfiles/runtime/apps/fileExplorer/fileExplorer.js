@@ -1483,7 +1483,7 @@ function makeIcon(type, size = 16) {
         div.style.borderBottom = isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #eee";
         div.style.cursor = "pointer";
         div.style.color = isDark ? "#e6eef8" : "#111";
-        if (item[0].endsWith(".smh")) {div.addEventListener('dblclick', () => evalJsApp(item[2].path));}
+        if (!isFolder) {div.addEventListener('dblclick', () => alert('Open file by right clicking on the file and select the app you want to do so in Open With'));} // placeholder, will implement default opening soon
         // Highlight selected
         if (selectedItems.includes(item)) {
           div.setAttribute('data-selected', 'true');
@@ -2286,6 +2286,20 @@ function makeIcon(type, size = 16) {
         }
       });
       }
+      addItem("Create Shortcut", () => {
+        const filePath = getItemPath(selectedItem);
+        if (!filePath) return;
+        const itemPath = String(filePath).replace(/^root\//, "/").replace(/^root$/, "/");
+        const record = {
+          type: isFolder ? "folder" : "file",
+          label: selectedItem[0],
+          name: selectedItem[0],
+          path: itemPath.startsWith("/") ? itemPath : `/${itemPath}`,
+          x: 24,
+          y: 24,
+        };
+        window.protectedGlobals.createDesktopShortcut(record);
+      });
       addItem("Rename", () => {
         const oldName = selectedItem[0];
 
