@@ -183,7 +183,7 @@ const saveTaskButtons = window.protectedGlobals.saveTaskButtons = function saveT
   if (!silence) window.protectedGlobals.notification("taskbuttons saved!");
   window.protectedGlobals.posttaskbuttons(postdata);
 }
-const bringToFront = window.protectedGlobals.bringToFront = function bringToFront(el) {
+const bringToFront = window.protectedGlobals.bringToFront = function (el) {
   if (!el) return;
   var appId = resolveWindowAppId(el);
   window.protectedGlobals.atTop = appId || "";
@@ -191,7 +191,7 @@ const bringToFront = window.protectedGlobals.bringToFront = function bringToFron
   window.protectedGlobals.atTopElement = el;
 }
 
-const resolveWindowAppId = window.protectedGlobals.resolveWindowAppId = function resolveWindowAppId(el) {
+const resolveWindowAppId = function (el) {
   if (!el) return "";
   var appId = el.dataset && el.dataset.appId;
   if (!appId) appId = el.getAttribute && el.getAttribute("data-app-id");
@@ -248,16 +248,16 @@ const resolveWindowLabel = window.protectedGlobals.resolveWindowLabel = function
   return "Window";
 }
 
-const getSwitchableWindows = window.protectedGlobals.getSwitchableWindows = function getSwitchableWindows() {
-  return Array.from(document.querySelectorAll(".app-window-root")).filter((el) => {
-    if (!el || !el.isConnected) return false;
-    var cs = window.getComputedStyle(el);
-    if (!cs) return false;
-    return cs.display !== "none" && cs.visibility !== "hidden";
+const getSwitchableWindows = function () {
+  return Array.from(document.querySelectorAll(".app-window-root")).filter(function (el) {
+    // only return windows that are from non headless apps (appobj.headless === false)
+    var appId = resolveWindowAppId(el);
+    var appMeta = findAppByIdentifier(appId);
+    return appMeta && appMeta.headless !== true;
   });
 }
 
-const resolveFocusedWindowRoot = window.protectedGlobals.resolveFocusedWindowRoot = function resolveFocusedWindowRoot(windows) {
+const resolveFocusedWindowRoot = function (windows) {
   let atTop = window.protectedGlobals.calcTop();
   if (atTop && windows && windows.length) {
     for (var i = 0; i < windows.length; i++) {
@@ -281,7 +281,7 @@ window.protectedGlobals.windowSwitchState = {
 };
 var windowSwitchState = window.protectedGlobals.windowSwitchState;
 
-var prepareWindowSwitchPreview = window.protectedGlobals.prepareWindowSwitchPreview = function prepareWindowSwitchPreview() {
+var prepareWindowSwitchPreview = function () {
   if (
     windowSwitchState.previewRoot &&
     windowSwitchState.previewRoot.isConnected
@@ -305,7 +305,7 @@ var prepareWindowSwitchPreview = window.protectedGlobals.prepareWindowSwitchPrev
   var panel = document.createElement("div");
   var systemDark = !!(window.protectedGlobals.data.dark);
   Object.assign(panel.style, {
-    minWidth: "520px",
+    minWidth: "100px",
     maxWidth: "88vw",
     maxHeight: "76vh",
     overflow: "hidden",
@@ -350,12 +350,12 @@ var prepareWindowSwitchPreview = window.protectedGlobals.prepareWindowSwitchPrev
   windowSwitchState.previewList = list;
 }
 
-var hideWindowSwitchPreview = window.protectedGlobals.hideWindowSwitchPreview = function hideWindowSwitchPreview() {
+var hideWindowSwitchPreview = function () {
   if (!windowSwitchState.previewRoot) return;
   windowSwitchState.previewRoot.style.display = "none";
 }
 
-var renderWindowSwitchPreview = window.protectedGlobals.renderWindowSwitchPreview = function renderWindowSwitchPreview(modLabel) {
+var renderWindowSwitchPreview = function (modLabel) {
   prepareWindowSwitchPreview();
   if (!windowSwitchState.previewRoot || !windowSwitchState.previewList) return;
 
@@ -469,14 +469,18 @@ var renderWindowSwitchPreview = window.protectedGlobals.renderWindowSwitchPrevie
   windowSwitchState.previewRoot.setAttribute("data-mod", modLabel || "");
 }
 
-var commitWindowSwitchTarget = window.protectedGlobals.commitWindowSwitchTarget = function commitWindowSwitchTarget() {
+var commitWindowSwitchTarget = function () {
   var target = windowSwitchState.pendingTarget;
   if (!target || !target.isConnected) return;
   window.protectedGlobals.bringToFront(target);
+  const appId = resolveWindowAppId(target);
+  const app = findAppByIdentifier(appId);
+  const appInstance = window[app.globalVarObjectString][app.allAppArrayString].find((inst) => inst.rootElement === target);
+  appInstance.showWindow();
   target.focus({ preventScroll: true });
 }
 
-var resetWindowSwitchState = window.protectedGlobals.resetWindowSwitchState = function resetWindowSwitchState() {
+var resetWindowSwitchState = function () {
   hideWindowSwitchPreview();
   windowSwitchState.active = false;
   windowSwitchState.mod = "";
@@ -486,7 +490,7 @@ var resetWindowSwitchState = window.protectedGlobals.resetWindowSwitchState = fu
   windowSwitchState.pendingTarget = null;
 }
 
-var cycleWindowFocus = window.protectedGlobals.cycleWindowFocus = function cycleWindowFocus(reverse, modKey, options) {
+var cycleWindowFocus = window.protectedGlobals.cycleWindowFocus = function (reverse, modKey, options) {
   var windows = getSwitchableWindows();
   if (!windows || windows.length <= 1) return false;
 
@@ -550,7 +554,7 @@ var cycleWindowFocus = window.protectedGlobals.cycleWindowFocus = function cycle
   return true;
 }
 
-var syncWindowSwitchPreview = window.protectedGlobals.syncWindowSwitchPreview = function syncWindowSwitchPreview(target, modKey) {
+var syncWindowSwitchPreview = function (target, modKey) {
   if (!target || !target.isConnected) return false;
 
   var windows = getSwitchableWindows();
@@ -707,50 +711,6 @@ setTimeout(() => {
 setTimeout(() => {
 document.documentElement.style.filter = `brightness(${window.protectedGlobals.statusData && window.protectedGlobals.statusData.brightness}%)`;
 }, 1000);
-// // 1. Create a new MutationObserver instance with a callback function
-// window.protectedGlobals.observer = new MutationObserver((mutationsList, observer) => {
-//   if (mutationsList) {
-//     document.documentElement.style.filter = `brightness(${window.protectedGlobals.statusData.brightness}%)`;
-//   }
-// });
-// var observer = window.protectedGlobals.observer;
-
-// 2. Select the target node you want to observe (e.g., the entire document body)
-// window.protectedGlobals.targetNode = document.body;
-// var targetNode = window.protectedGlobals.targetNode;
-
-// 3. Configure the observer with an options object
-// window.protectedGlobals.config = {
-//   childList: true, // Observe direct children addition/removal
-//   attributes: true, // Observe attribute changes
-//   characterData: true, // Observe changes to text content
-//   subtree: true, // Observe changes in the entire subtree (children, grandchildren, etc.)
-//   attributeOldValue: true, // Record the old value of the attribute
-//   characterDataOldValue: true, // Record the old value of the character data
-// };
-// var config = window.protectedGlobals.config;
-
-// // 4. Start observing the target node with the specified configuration
-// if (window.protectedGlobals.systemAPIs.observer) {
-//   window.protectedGlobals.systemAPIs.observer.disconnect();
-// }
-// window.protectedGlobals.systemAPIs.observer = observer;
-// window.protectedGlobals.observer.observe(window.protectedGlobals.targetNode, window.protectedGlobals.config);
-
-// To stop observing later:
-// observer.disconnect();
-
-// helpers global
-var getStringAfterChar = window.protectedGlobals.getStringAfterChar = function getStringAfterChar(str, char) {
-  var index = str.indexOf(char);
-  if (index !== -1) {
-    // Add 1 to the index to start after the character itself
-    return str.substring(index + 1);
-  } else {
-    // Return the original string or handle the case where the character is not found
-    return str;
-  }
-}
 
 // Global window.protectedGlobals.notification helper: call window.protectedGlobals.notification("message") to show a temporary toast for 3s
 window.protectedGlobals.notification = function(message, options) {
@@ -806,14 +766,4 @@ window.protectedGlobals.notification = function(message, options) {
     }
     return { x: currentWindowXY.x + cnt * dx, y: currentWindowXY.y + cnt * dy };
   }
-
-
-
-
-
-
-
-
-
-
 })();

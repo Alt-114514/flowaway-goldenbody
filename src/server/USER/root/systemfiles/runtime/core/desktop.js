@@ -6,6 +6,14 @@
   const DESKTOP_DIR = "/desktop";
   const LAYER_ID = "desktop-shortcuts-layer";
   const MENU_ID = "desktop-shortcut-context-menu";
+  const SHORTCUT_BUBBLE = {
+    width: 92,
+    height: 92,
+    gapX: 10,
+    gapY: 26,
+    paddingX: 20,
+    paddingY: 18,
+  };
 
   window.protectedGlobals.shortcuts = Array.isArray(window.protectedGlobals.shortcuts)
     ? window.protectedGlobals.shortcuts
@@ -45,39 +53,131 @@
     };
   }
 
-  function nextShortcutPosition() {
-    return findClosestFreeSpot();
+  function getShortcutPositionBounds() {
+    return {
+      minX: 12,
+      maxX: Math.max(12, window.innerWidth - SHORTCUT_BUBBLE.width - 16),
+      minY: 12,
+      maxY: Math.max(12, window.innerHeight - SHORTCUT_BUBBLE.height - 26),
+    };
   }
 
-  function findClosestFreeSpot() {
+  function getShortcutBubbleRect(x, y) {
+    return {
+      left: Number(x) || 0,
+      top: Number(y) || 0,
+      right: (Number(x) || 0) + SHORTCUT_BUBBLE.width,
+      bottom: (Number(y) || 0) + SHORTCUT_BUBBLE.height,
+    };
+  }
+
+  function shortcutRectsOverlap(a, b) {
+    return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  }
+
+  function getShortcutGrid() {
     const bounds = getDesktopBounds();
-    const padding = 24;
-    const cellW = 90;
-    const cellH = 90;
-    const maxCols = Math.max(1, Math.floor((bounds.width - padding * 2) / cellW));
-    const existing = (Array.isArray(window.protectedGlobals.shortcuts) ? window.protectedGlobals.shortcuts : []).map((s) => ({ x: Number(s.x) || 0, y: Number(s.y) || 0 }));
+    const itemWidth = SHORTCUT_BUBBLE.width;
+    const itemHeight = SHORTCUT_BUBBLE.height;
+    const cellW = itemWidth + SHORTCUT_BUBBLE.gapX;
+    const cellH = itemHeight + SHORTCUT_BUBBLE.gapY;
+    return {
+      bounds,
+      paddingX: SHORTCUT_BUBBLE.paddingX,
+      paddingY: SHORTCUT_BUBBLE.paddingY,
+      itemWidth,
+      itemHeight,
+      cellW,
+      cellH,
+      maxCols: Math.max(1, Math.floor((bounds.width - SHORTCUT_BUBBLE.paddingX * 2) / cellW)),
+    };
+  }
+
+  function getNextShortcutPosition(existingItems = [], requestedIndex = 0) {
+    const { paddingX, paddingY, cellW, cellH, maxCols } = getShortcutGrid();
+    const bounds = getShortcutPositionBounds();
+    const existing = Array.isArray(existingItems) ? existingItems : [];
+    const freePositions = [];
 
     for (let row = 0; row < 200; row++) {
       for (let col = 0; col < maxCols; col++) {
-        const x = padding + col * cellW;
-        const y = padding + row * cellH;
-        // ensure inside usable area
-        const clampedX = clamp(x, 12, Math.max(12, window.innerWidth - 96));
-        const clampedY = clamp(y, 12, Math.max(12, window.innerHeight - 140));
-        let collides = false;
-        for (const ex of existing) {
-          if (Math.abs(ex.x - clampedX) < cellW - 18 && Math.abs(ex.y - clampedY) < cellH - 18) {
-            collides = true;
-            break;
-          }
+        const x = paddingX + col * cellW;
+        const y = paddingY + row * cellH;
+        const clampedX = clamp(x, bounds.minX, bounds.maxX);
+        const clampedY = clamp(y, bounds.minY, bounds.maxY);
+        const slotRect = getShortcutBubbleRect(clampedX, clampedY);
+        const collides = existing.some((entry) => {
+          const entryRect = getShortcutBubbleRect(Number(entry.x) || 0, Number(entry.y) || 0);
+          return shortcutRectsOverlap(slotRect, entryRect);
+        });
+        if (!collides) {
+          freePositions.push({ x: clampedX, y: clampedY });
         }
-        if (!collides) return { x: clampedX, y: clampedY };
       }
     }
-    // fallback to simple cascade if grid exhausted
-    const fallbackX = padding;
-    const fallbackY = padding;
-    return { x: fallbackX, y: fallbackY };
+
+    const targetIndex = Math.max(0, Math.min(Number(requestedIndex) || 0, freePositions.length - 1));
+    if (!freePositions.length) {
+      return { x: paddingX, y: paddingY };
+    }
+    return freePositions[targetIndex] || freePositions[0];
+  }
+
+  function getAllShortcutGridSlots() {
+    const { paddingX, paddingY, cellW, cellH, maxCols } = getShortcutGrid();
+    const bounds = getShortcutPositionBounds();
+    const slots = [];
+    for (let row = 0; row < 200; row++) {
+      for (let col = 0; col < maxCols; col++) {
+        const x = clamp(paddingX + col * cellW, bounds.minX, bounds.maxX);
+        const y = clamp(paddingY + row * cellH, bounds.minY, bounds.maxY);
+        slots.push({ x, y });
+      }
+    }
+    return slots;
+  }
+
+  function getClosestAvailableShortcutSlot(shortcut, occupiedSlots = []) {
+    const currentX = Number(shortcut.x) || 0;
+    const currentY = Number(shortcut.y) || 0;
+    const { paddingX, paddingY, cellW, cellH } = getShortcutGrid();
+    const slots = getAllShortcutGridSlots();
+    const occupiedRects = (Array.isArray(occupiedSlots) ? occupiedSlots : []).map((slot) => getShortcutBubbleRect(Number(slot.x) || 0, Number(slot.y) || 0));
+
+    const currentCellX = Math.round((currentX - paddingX) / cellW);
+    const currentCellY = Math.round((currentY - paddingY) / cellH);
+
+    let best = null;
+    for (const slot of slots) {
+      const slotRect = getShortcutBubbleRect(slot.x, slot.y);
+      const overlapsExisting = occupiedRects.some((rect) => shortcutRectsOverlap(slotRect, rect));
+      if (overlapsExisting) continue;
+
+      const slotCellX = Math.round((slot.x - paddingX) / cellW);
+      const slotCellY = Math.round((slot.y - paddingY) / cellH);
+      const cellDelta = Math.abs(slotCellX - currentCellX) + Math.abs(slotCellY - currentCellY);
+      const distance = Math.hypot(slot.x - currentX, slot.y - currentY);
+      const score = cellDelta * 1000 + distance;
+      if (!best || score < best.score || (score === best.score && (slot.y < best.slot.y || (slot.y === best.slot.y && slot.x < best.slot.x)))) {
+        best = { slot, score };
+      }
+    }
+
+    return best ? best.slot : { x: currentX, y: currentY };
+  }
+
+  function findClosestFreeSpot() {
+    return getNextShortcutPosition(
+      (Array.isArray(window.protectedGlobals.shortcuts) ? window.protectedGlobals.shortcuts : []).map((s) => ({ x: Number(s.x) || 0, y: Number(s.y) || 0 })),
+      0,
+    );
+  }
+
+  function nextShortcutPosition() {
+    return getNextShortcutPosition(
+      Array.isArray(window.protectedGlobals.shortcuts) ? window.protectedGlobals.shortcuts : [],
+      (Array.isArray(window.protectedGlobals.shortcuts) ? window.protectedGlobals.shortcuts.length : 0),
+    );
   }
 
   function normalizeShortcut(raw) {
@@ -111,44 +211,56 @@
       item.appId = item.id;
     }
     if (!item.path && finalType !== "app") return null;
-    item.x = clamp(item.x, 12, Math.max(12, window.innerWidth - 96));
-    item.y = clamp(item.y, 12, Math.max(12, window.innerHeight - 140));
+    const bounds = getShortcutPositionBounds();
+    item.x = clamp(item.x, bounds.minX, bounds.maxX);
+    item.y = clamp(item.y, bounds.minY, bounds.maxY);
     return item;
   }
 
-  async function ensureDesktopFolder() {
-    try {
-      await window.protectedGlobals.ReadFolder(DESKTOP_DIR);
-      return true;
-    } catch (e) {
-      try {
-        await window.protectedGlobals.WriteFolder(DESKTOP_DIR);
-        return true;
-      } catch (writeErr) {
-        try {
-          await window.protectedGlobals.WriteFile(`${DESKTOP_DIR}/.keep`, "", { text: true, replace: true });
-          return true;
-        } catch (err) {
-          console.warn("Could not initialize desktop directory", err);
-          return false;
-        }
-      }
+  function getShortcutThemePalette() {
+    return {
+      text: "#f8fafc",
+      label: "rgba(15, 23, 42, 0.82)",
+      iconBg: "rgba(15, 23, 42, 0.46)",
+      iconBorder: "rgba(255,255,255,0.12)",
+      iconShadow: "rgba(0,0,0,0.18)",
+    };
+  }
+
+  function applyShortcutThemeToNode(itemNode, labelNode, iconNode) {
+    const palette = getShortcutThemePalette();
+    if (itemNode) {
+      itemNode.style.color = palette.label;
+      itemNode.style.textShadow = "0 1px 2px rgba(0,0,0,0.16)";
+    }
+    if (labelNode) {
+      labelNode.style.color = palette.label;
+    }
+    if (iconNode) {
+      iconNode.style.color = palette.text;
+      iconNode.style.background = palette.iconBg;
+      iconNode.style.border = `1px solid ${palette.iconBorder}`;
+      iconNode.style.boxShadow = `0 8px 18px ${palette.iconShadow}`;
     }
   }
 
   function renderShortcutIcon(shortcut) {
     const iconWrap = document.createElement("div");
+    iconWrap.className = "desktop-shortcut-icon";
     iconWrap.style.display = "flex";
     iconWrap.style.alignItems = "center";
     iconWrap.style.justifyContent = "center";
     iconWrap.style.width = "42px";
     iconWrap.style.height = "42px";
+    iconWrap.style.minWidth = "42px";
+    iconWrap.style.minHeight = "42px";
+    iconWrap.style.flexShrink = "0";
     iconWrap.style.borderRadius = "12px";
-    iconWrap.style.background = "rgba(15, 23, 42, 0.38)";
+    iconWrap.style.background = getShortcutThemePalette().iconBg;
     iconWrap.style.backdropFilter = "blur(8px)";
-    iconWrap.style.border = "1px solid rgba(255,255,255,0.18)";
-    iconWrap.style.boxShadow = "0 8px 18px rgba(0,0,0,0.18)";
-    iconWrap.style.color = "#fff";
+    iconWrap.style.border = `1px solid ${getShortcutThemePalette().iconBorder}`;
+    iconWrap.style.boxShadow = `0 8px 18px ${getShortcutThemePalette().iconShadow}`;
+    iconWrap.style.color = getShortcutThemePalette().text;
     iconWrap.style.fontWeight = "700";
     iconWrap.style.fontSize = "18px";
     iconWrap.style.userSelect = "none";
@@ -223,6 +335,7 @@
     if (shortcut.type === "folder") {
       const svg = (window.protectedGlobals.fileIconSet && window.protectedGlobals.fileIconSet.folder) || "";
       const frag = document.createElement("div");
+      frag.style.color = getShortcutThemePalette().text;
       frag.innerHTML = svg;
       try {
         frag.querySelectorAll && frag.querySelectorAll("img,svg").forEach((n) => {
@@ -243,6 +356,7 @@
 
     const svgFile = (window.protectedGlobals.fileIconSet && window.protectedGlobals.fileIconSet.file) || "";
     const fragFile = document.createElement("div");
+    fragFile.style.color = getShortcutThemePalette().text;
     fragFile.innerHTML = svgFile;
     try {
       fragFile.querySelectorAll && fragFile.querySelectorAll("img,svg").forEach((n) => {
@@ -271,10 +385,10 @@
     return `${DESKTOP_DIR}/${fileName}`;
   }
 
-  async function saveShortcutEntry(entry) {
+  async function saveShortcutEntry(entry, options = {}) {
+    const renderAfterSave = options.renderAfterSave !== false;
     const shortcut = normalizeShortcut(entry);
     if (!shortcut) return null;
-    await ensureDesktopFolder();
     const fileName = shortcut.fileName || normalizeShortcutFilename(shortcut.id || shortcut.appId || shortcut.label || shortcut.path || "shortcut");
     shortcut.fileName = fileName;
     shortcut.id = shortcut.id || shortcut.appId || shortcut.label || shortcut.path || `shortcut-${Date.now()}`;
@@ -290,7 +404,9 @@
     } else {
       window.protectedGlobals.shortcuts.push(shortcut);
     }
-    renderDesktopShortcuts();
+    if (renderAfterSave) {
+      renderDesktopShortcuts();
+    }
     return shortcut;
   }
 
@@ -310,6 +426,43 @@
       return (app && app.label) || shortcut.label || shortcut.name || "App";
     }
     return shortcut.label || shortcut.name || "Shortcut";
+  }
+
+  function isProtectedSensitiveFilePath(filePath) {
+    const normalized = String(filePath || "").replace(/\\/g, "/").trim();
+    const safePath = normalized.startsWith("/") ? normalized : `/${normalized}`;
+    const lower = safePath.toLowerCase();
+    if (lower === "/systemfiles/userprofile/jsapikey.txt") return true;
+    return /^\/systemfiles\/runtime\/apps\/[^/]+\/jskey\.txt$/i.test(lower);
+  }
+
+  function getOpenWithApps(filePath) {
+    const fileName = String(filePath || "").split("/").pop() || "";
+    const ext = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".")).toLowerCase() : "";
+    const apps = (window.protectedGlobals.apps || [])
+      .filter(Boolean)
+      .filter((app) => {
+        const capability = Array.isArray(app.openfileCapability)
+          ? app.openfileCapability
+          : String(app.openfileCapability || "").split(",").map((part) => part.trim().toLowerCase()).filter(Boolean);
+        if (!capability.length) return false;
+        if (capability.includes("*")) return true;
+        if (!ext) return false;
+        return capability.includes(ext);
+      })
+      .filter((app) => {
+        if (isProtectedSensitiveFilePath(filePath)) {
+          return app.requestAdminPerm === true;
+        }
+        return true;
+      })
+      .map((app) => ({
+        id: app.id || app.functionName || app.label,
+        label: app.label || app.functionName || app.id || "App",
+        functionName: app.functionName || app.id,
+      }))
+      .filter((app) => app.functionName && typeof window[app.functionName] === "function");
+    return apps;
   }
 
   function createShortcutMenu(e, shortcut) {
@@ -354,10 +507,6 @@
       menu.appendChild(row);
     };
 
-    addItem("Remove Shortcut", async () => {
-      await deleteShortcutById(shortcut.id).catch(() => {});
-    });
-
     if (shortcut.type === "app") {
       addItem("Open", async () => {
         const appId = shortcut.appId || shortcut.id;
@@ -375,7 +524,135 @@
         const targetPath = normalizeShortcutPath(shortcut.path) || "/";
         window.fileExplorer(targetPath, 50, 50);
       });
+      addItem("Copy Path", async () => {
+        const targetPath = normalizeShortcutPath(shortcut.path) || "/";
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(targetPath);
+            return;
+          }
+        } catch (err) {}
+        try {
+          const temp = document.createElement("textarea");
+          temp.value = targetPath;
+          temp.setAttribute("readonly", "");
+          temp.style.position = "fixed";
+          temp.style.opacity = "0";
+          document.body.appendChild(temp);
+          temp.select();
+          document.execCommand("copy");
+          temp.remove();
+        } catch (err) {
+          console.warn("Failed to copy shortcut path", err);
+        }
+      });
     }
+
+    if (shortcut.type === "file" && shortcut.path) {
+      const openWithApps = getOpenWithApps(shortcut.path);
+      if (openWithApps.length) {
+        const openWithRow = document.createElement("div");
+        openWithRow.textContent = "Open with";
+        Object.assign(openWithRow.style, {
+          padding: "6px 8px",
+          borderRadius: "6px",
+          cursor: "pointer",
+          userSelect: "none",
+          position: "relative",
+        });
+        openWithRow.addEventListener("mouseenter", () => {
+          openWithRow.style.background = window.protectedGlobals.data.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)";
+        });
+        openWithRow.addEventListener("mouseleave", () => {
+          openWithRow.style.background = "transparent";
+        });
+
+        const submenu = document.createElement("div");
+        Object.assign(submenu.style, {
+          position: "absolute",
+          left: "calc(100% + 6px)",
+          top: "0",
+          minWidth: "170px",
+          padding: "6px",
+          borderRadius: "8px",
+          background: window.protectedGlobals.data.dark ? "#1a1a1a" : "#ffffff",
+          color: window.protectedGlobals.data.dark ? "#ffffff" : "#111111",
+          border: window.protectedGlobals.data.dark ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(0,0,0,0.12)",
+          boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
+          display: "none",
+          zIndex: 100004,
+        });
+
+        let submenuShowTimer = null;
+        let submenuHideTimer = null;
+        const clearSubmenuTimers = () => {
+          if (submenuShowTimer) clearTimeout(submenuShowTimer);
+          if (submenuHideTimer) clearTimeout(submenuHideTimer);
+          submenuShowTimer = null;
+          submenuHideTimer = null;
+        };
+        const showSubmenu = () => {
+          clearSubmenuTimers();
+          submenuShowTimer = setTimeout(() => {
+            submenu.style.display = "block";
+          }, 120);
+        };
+        const hideSubmenu = () => {
+          clearSubmenuTimers();
+          submenuHideTimer = setTimeout(() => {
+            submenu.style.display = "none";
+          }, 180);
+        };
+
+        for (const app of openWithApps) {
+          const appRow = document.createElement("div");
+          appRow.textContent = app.label;
+          Object.assign(appRow.style, {
+            padding: "6px 8px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            userSelect: "none",
+          });
+          appRow.addEventListener("mouseenter", () => {
+            appRow.style.background = window.protectedGlobals.data.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)";
+          });
+          appRow.addEventListener("mouseleave", () => {
+            appRow.style.background = "transparent";
+          });
+          appRow.addEventListener("click", async () => {
+            menu.remove();
+            try {
+              if (typeof window[app.functionName] === "function") {
+                window[app.functionName](shortcut.path);
+              }
+            } catch (err) {
+              console.warn("Failed to open file with app", app.label, err);
+            }
+          });
+          submenu.appendChild(appRow);
+        }
+
+        openWithRow.addEventListener("mouseenter", () => {
+          showSubmenu();
+        });
+        openWithRow.addEventListener("mouseleave", () => {
+          hideSubmenu();
+        });
+        submenu.addEventListener("mouseenter", () => {
+          clearSubmenuTimers();
+          submenu.style.display = "block";
+        });
+        submenu.addEventListener("mouseleave", () => {
+          hideSubmenu();
+        });
+        openWithRow.appendChild(submenu);
+        menu.appendChild(openWithRow);
+      }
+    }
+
+    addItem("Remove Shortcut", async () => {
+      await deleteShortcutById(shortcut.id).catch(() => {});
+    });
 
     document.body.appendChild(menu);
     const menuRect = menu.getBoundingClientRect();
@@ -392,8 +669,64 @@
     }, { once: true });
   }
 
+  function wrapShortcutLabel(labelText, charsPerLine = 14) {
+    const text = String(labelText || "").trim();
+    if (!text) return "";
+
+    const words = text.replace(/\s+/g, " ").split(" ").filter(Boolean);
+    if (!words.length) return "";
+
+    const lines = [];
+    let currentLine = "";
+
+    for (const word of words) {
+      if (!word) continue;
+      if (word.length > charsPerLine) {
+        if (currentLine) {
+          lines.push(currentLine);
+          currentLine = "";
+        }
+        const chunked = word.match(new RegExp(`.{1,${charsPerLine}}`, "g")) || [word];
+        for (const chunk of chunked) {
+          if (chunk) lines.push(chunk);
+        }
+        continue;
+      }
+
+      const nextLine = currentLine ? `${currentLine} ${word}` : word;
+      if (nextLine.length <= charsPerLine || !currentLine) {
+        currentLine = nextLine;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+
+    if (currentLine) lines.push(currentLine);
+    return lines.join("\n");
+  }
+
+  function updateShortcutSelectionState(item, shortcutId) {
+    const isSelected = window.protectedGlobals.selectedDesktopShortcutId === shortcutId;
+    item.style.boxShadow = isSelected
+      ? "0 0 0 2px rgba(96, 165, 250, 0.42), 0 0 0 6px rgba(96, 165, 250, 0.14)"
+      : "none";
+    item.style.outline = isSelected ? "1px solid rgba(59, 130, 246, 0.78)" : "none";
+    item.style.background = isSelected ? "rgba(59, 130, 246, 0.08)" : "transparent";
+    item.style.borderRadius = "10px";
+  }
+
+  function syncDesktopShortcutSelectionVisuals() {
+    document.querySelectorAll(".desktop-shortcut-item").forEach((node) => {
+      const id = node.dataset.shortcutId;
+      updateShortcutSelectionState(node, id);
+    });
+  }
+
   function renderDesktopShortcuts() {
     if (!window.protectedGlobals.data) return;
+
+    const isDark = !!(window.protectedGlobals.data && window.protectedGlobals.data.dark);
 
     let layer = document.getElementById(LAYER_ID);
     if (!layer) {
@@ -425,40 +758,68 @@
       const normalized = normalizeShortcut(shortcut);
       if (!normalized) return;
 
+      const itemWidth = SHORTCUT_BUBBLE.width;
+      const itemHeight = SHORTCUT_BUBBLE.height;
       const item = document.createElement("div");
       item.className = "desktop-shortcut-item";
+      item.dataset.shortcutId = normalized.id;
       Object.assign(item.style, {
         position: "absolute",
-        left: `${clamp(Number(normalized.x) || 16, 12, Math.max(12, window.innerWidth - 96))}px`,
-        top: `${clamp(Number(normalized.y) || 16, 12, Math.max(12, window.innerHeight - 140))}px`,
-        width: "72px",
+        left: `${clamp(Number(normalized.x) || 16, 12, Math.max(12, window.innerWidth - SHORTCUT_BUBBLE.width - 16))}px`,
+        top: `${clamp(Number(normalized.y) || 16, 12, Math.max(12, window.innerHeight - SHORTCUT_BUBBLE.height - 26))}px`,
+        width: `${itemWidth}px`,
+        height: `${itemHeight}px`,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: "6px",
+        justifyContent: "center",
+        gap: "4px",
+        padding: "8px 8px 6px",
         pointerEvents: "auto",
         cursor: "pointer",
         userSelect: "none",
-        color: window.protectedGlobals.data.dark ? "#f5f7ff" : "#111827",
-        textShadow: "0 1px 2px rgba(0,0,0,0.38)",
+        color: getShortcutThemePalette().label,
+        textShadow: "0 1px 2px rgba(0,0,0,0.18)",
+        borderRadius: "10px",
+        boxSizing: "border-box",
       });
 
       const iconNode = renderShortcutIcon(normalized);
       item.appendChild(iconNode);
 
       const label = document.createElement("div");
+      label.className = "desktop-shortcut-label";
       const fullLabel = String(getShortcutLabel(normalized) || "");
       label.title = fullLabel;
       let labelText = fullLabel;
-      if (labelText.length > 25) labelText = labelText.slice(0, 25) + "...";
-      label.textContent = labelText;
+      if (labelText.length > 40) labelText = labelText.slice(0, 40) + "...";
+      label.textContent = wrapShortcutLabel(labelText, 18);
       label.style.fontSize = "11px";
       label.style.lineHeight = "1.2";
       label.style.textAlign = "center";
-      label.style.maxWidth = "72px";
+      label.style.display = "-webkit-box";
+      label.style.webkitBoxOrient = "vertical";
+      label.style.webkitLineClamp = "2";
+      label.style.lineClamp = "2";
+      label.style.width = `${itemWidth}px`;
+      label.style.maxWidth = `${itemWidth}px`;
+      label.style.whiteSpace = "normal";
       label.style.wordBreak = "break-word";
       label.style.overflowWrap = "anywhere";
+      label.style.overflow = "hidden";
+      label.style.textOverflow = "ellipsis";
+      label.style.color = getShortcutThemePalette().label;
       item.appendChild(label);
+      applyShortcutThemeToNode(item, label, iconNode);
+
+      updateShortcutSelectionState(item, normalized.id);
+
+      item.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        window.protectedGlobals.selectedDesktopShortcutId = normalized.id;
+        syncDesktopShortcutSelectionVisuals();
+      });
 
       item.addEventListener("contextmenu", (e) => {
         e.preventDefault();
@@ -484,11 +845,15 @@
 
       item.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
+        e.stopPropagation();
+        window.protectedGlobals.selectedDesktopShortcutId = normalized.id;
+        syncDesktopShortcutSelectionVisuals();
+
         const origin = { x: normalized.x, y: normalized.y };
         const startX = e.clientX;
         const startY = e.clientY;
         let started = false;
-        const threshold = 6; // pixels before a drag is considered started
+        const threshold = 12; // pixels before a drag is considered started
         const drag = (moveEvent) => {
           const dx = moveEvent.clientX - startX;
           const dy = moveEvent.clientY - startY;
@@ -497,8 +862,9 @@
             started = true;
             try { item.setPointerCapture && item.setPointerCapture(e.pointerId); } catch (err) {}
           }
-          const nextX = clamp(origin.x + dx, 12, Math.max(12, window.innerWidth - 96));
-          const nextY = clamp(origin.y + dy, 12, Math.max(12, window.innerHeight - 140));
+          const bounds = getShortcutPositionBounds();
+          const nextX = clamp(origin.x + dx, bounds.minX, bounds.maxX);
+          const nextY = clamp(origin.y + dy, bounds.minY, bounds.maxY);
           item.style.left = `${nextX}px`;
           item.style.top = `${nextY}px`;
           normalized.x = nextX;
@@ -514,7 +880,23 @@
           document.removeEventListener("pointerup", stop);
           try { item.releasePointerCapture && item.releasePointerCapture(e.pointerId); } catch (err) {}
           // only save when an actual drag occurred
-          if (started) await saveShortcutEntry(normalized).catch(() => {});
+          if (started) {
+            const occupiedSlots = (window.protectedGlobals.shortcuts || [])
+              .filter((candidate) => candidate && candidate.id !== normalized.id)
+              .map((candidate) => ({ x: Number(candidate.x) || 0, y: Number(candidate.y) || 0 }));
+            const snapped = getClosestAvailableShortcutSlot(normalized, occupiedSlots);
+            normalized.x = snapped.x;
+            normalized.y = snapped.y;
+            const bounds = getShortcutPositionBounds();
+            item.style.left = `${clamp(normalized.x, bounds.minX, bounds.maxX)}px`;
+            item.style.top = `${clamp(normalized.y, bounds.minY, bounds.maxY)}px`;
+            const match = window.protectedGlobals.shortcuts.find((candidate) => candidate.id === normalized.id);
+            if (match) {
+              match.x = normalized.x;
+              match.y = normalized.y;
+            }
+            await saveShortcutEntry(normalized).catch(() => {});
+          }
         };
         document.addEventListener("pointermove", drag);
         document.addEventListener("pointerup", stop, { once: true });
@@ -543,7 +925,6 @@
 
   async function loadDesktopShortcuts() {
     try {
-      await ensureDesktopFolder();
       const entries = await window.protectedGlobals.ReadFolder(DESKTOP_DIR).catch(() => []);
 
       // Normalize different ReadFolder return shapes: string names, [name,...], or { name/path }
@@ -566,22 +947,24 @@
         }
       }
 
-      const shortcuts = [];
-      for (const fileName of names) {
-        if (!fileName || String(fileName).toLowerCase().endsWith(".json") === false) continue;
-        const content = await window.protectedGlobals.ReadFile(`${DESKTOP_DIR}/${fileName}`, { text: true, direct: true }).catch(() => null);
-        if (!content) continue;
-        try {
-          const parsed = JSON.parse(content);
-          const normalized = normalizeShortcut(parsed);
-          if (normalized) {
+      const shortcutReads = names
+        .filter((fileName) => fileName && String(fileName).toLowerCase().endsWith(".json"))
+        .map(async (fileName) => {
+          const content = await window.protectedGlobals.ReadFile(`${DESKTOP_DIR}/${fileName}`, { text: true, direct: true }).catch(() => null);
+          if (!content) return null;
+          try {
+            const parsed = JSON.parse(content);
+            const normalized = normalizeShortcut(parsed);
+            if (!normalized) return null;
             normalized.fileName = fileName;
-            shortcuts.push(normalized);
+            return normalized;
+          } catch (err) {
+            console.warn("Failed to parse desktop shortcut JSON", fileName, err);
+            return null;
           }
-        } catch (err) {
-          console.warn("Failed to parse desktop shortcut JSON", fileName, err);
-        }
-      }
+        });
+
+      const shortcuts = (await Promise.all(shortcutReads)).filter(Boolean);
       window.protectedGlobals.shortcuts = shortcuts;
       renderDesktopShortcuts();
     } catch (err) {
@@ -603,8 +986,6 @@
       if (v === undefined || v === null) return false;
       const n = Number(v);
       if (!Number.isFinite(n)) return false;
-      // treat the runtime default 24 as a non-explicit placeholder coming from other codepaths
-      if (n === 24) return false;
       return true;
     };
     const hasExplicitPos = entry && (isExplicitCoordinate(entry.x) || isExplicitCoordinate(entry.y));
@@ -623,16 +1004,13 @@
     const appId = appMeta.id;
     const existing = window.protectedGlobals.shortcuts.find((shortcut) => shortcut.type === "app" && shortcut.appId === appId);
     if (existing) return existing;
-    const pos = nextShortcutPosition();
     return window.protectedGlobals.createDesktopShortcut({
       id: `app-${appId}`,
       appId,
       type: "app",
       label: appMeta.label || appId,
       name: appMeta.label || appId,
-      path: appMeta.path || `/systemfiles/runtime/apps/${appMeta.folderName || appId}`,
-      x: pos.x,
-      y: pos.y,
+      path: appMeta.path || `/systemfiles/runtime/apps/${appMeta.folderName || appId}`
     });
   };
 
@@ -644,12 +1022,19 @@
     return true;
   };
 
+  document.addEventListener("pointerdown", (evt) => {
+    if (evt.target && evt.target.closest && evt.target.closest(".desktop-shortcut-item")) return;
+    window.protectedGlobals.selectedDesktopShortcutId = null;
+    syncDesktopShortcutSelectionVisuals();
+  });
+
   window.protectedGlobals.refreshDesktopShortcuts = refreshDesktopShortcuts;
-  window.protectedGlobals.saveDesktopShortcuts = async function saveDesktopShortcuts() {
+  window.protectedGlobals.saveDesktopShortcuts = async function saveDesktopShortcuts(options = {}) {
+    const skipRender = !!options.skipRender;
     const items = Array.isArray(window.protectedGlobals.shortcuts) ? window.protectedGlobals.shortcuts : [];
     for (const item of items) {
       if (item && typeof item === "object") {
-        await saveShortcutEntry(item).catch(() => {});
+        await saveShortcutEntry(item, { renderAfterSave: !skipRender }).catch(() => {});
       }
     }
   };

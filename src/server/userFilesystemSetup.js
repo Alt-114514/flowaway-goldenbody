@@ -45,89 +45,6 @@ function defaultStartMenuConfig() {
   };
 }
 
-function defaultDesktopShortcuts() {
-  return [
-    {
-      id: 'app-File Explorer',
-      type: 'app',
-      label: 'File Explorer',
-      path: '/systemfiles/runtime/apps/fileExplorer',
-      appId: 'File Explorer',
-      name: 'File Explorer',
-      x: 24,
-      y: 24,
-      fileName: 'app-File_Explorer.json',
-    },
-    {
-      id: 'app-Browser',
-      type: 'app',
-      label: 'Browser',
-      path: '/systemfiles/runtime/apps/browser',
-      appId: 'Browser',
-      name: 'Browser',
-      x: 24,
-      y: 144,
-      fileName: 'app-Browser.json',
-    },
-    {
-      id: 'app-Terminal',
-      type: 'app',
-      label: 'Terminal',
-      path: '/systemfiles/runtime/apps/terminal',
-      appId: 'Terminal',
-      name: 'Terminal',
-      x: 24,
-      y: 264,
-      fileName: 'app-Terminal.json',
-    },
-    {
-      id: 'app-Text Editor',
-      type: 'app',
-      label: 'Text Editor',
-      path: '/systemfiles/runtime/apps/textEditor',
-      appId: 'Text Editor',
-      name: 'Text Editor',
-      x: 24,
-      y: 384,
-      fileName: 'app-Text_Editor.json',
-    },
-    {
-      id: 'app-Settings',
-      type: 'app',
-      label: 'Settings',
-      path: '/systemfiles/runtime/apps/settings',
-      appId: 'Settings',
-      name: 'Settings',
-      x: 24,
-      y: 504,
-      fileName: 'app-Settings.json',
-    },
-    {
-      id: '/systemfiles/runtime/apps',
-      type: 'folder',
-      label: 'apps',
-      path: '/systemfiles/runtime/apps',
-      name: 'apps',
-      x: 168,
-      y: 24,
-      fileName: 'systemfiles_runtime_apps.json',
-    },
-  ];
-}
-
-async function ensureDesktopShortcuts(userPaths) {
-  const desktopDir = path.join(userPaths.userRoot, 'desktop');
-  await fs.promises.mkdir(desktopDir, { recursive: true });
-
-  for (const shortcut of defaultDesktopShortcuts()) {
-    const shortcutPath = path.join(desktopDir, shortcut.fileName);
-    if (await pathExists(shortcutPath)) continue;
-    try {
-      await fs.promises.writeFile(shortcutPath, JSON.stringify(shortcut, null, 2));
-    } catch (e) {}
-  }
-}
-
 async function ensureStartMenuConfig(userPaths) {
   await fs.promises.mkdir(userPaths.userProfileDir, { recursive: true });
 
@@ -251,7 +168,6 @@ async function setupUserFilesystem(userPaths) {
   await ensureStartMenuConfig(userPaths);
   const userKey = await ensureAppIntegrityKey(userPaths);
   await copyTemplateToUser(userPaths);
-  await ensureDesktopShortcuts(userPaths);
   await syncAppKeysToUserKey(userPaths, userKey);
   return userKey;
 }

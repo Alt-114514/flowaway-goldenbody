@@ -43,8 +43,18 @@ window.protectedGlobals.launchApp = async function (appId, args) {
   }
   window.protectedGlobals._launchContext = { appId: String(appId || ""), args: args === undefined ? [] : Array.isArray(args) ? args : [args] };
   let result = null;
-  if (app.requestAdminPerm) result = window[app.functionName](...window.protectedGlobals._launchContext.args);
-  else result = await window[app.functionName](undefined, undefined, args);
+  document.body.style.cursor = "wait";
+  try {
+    if (app.requestAdminPerm) {
+      result = await window[app.functionName](...window.protectedGlobals._launchContext.args);
+    } else {
+      result = await window[app.functionName](undefined, undefined, args);
+    }
+  } catch (err) {
+    alert(err);
+  }
+  document.body.style.cursor = "default";
+  // change cursor shape to wait while the app is loading
   return result;
 };
 
@@ -316,7 +326,7 @@ window.protectedGlobals.removeOtherMenus = function (except) {
     if ((m.remove)) m.remove();
   }
 };
-window.protectedGlobals.showUnifiedAppContextMenu = function (e,   appOverride = null) {
+window.protectedGlobals.showUnifiedAppContextMenu = function (e, appOverride = null) {
   if (!e) return;
   e.preventDefault();
 

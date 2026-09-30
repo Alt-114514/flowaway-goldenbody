@@ -138,3 +138,6 @@
 
 ## V 2.4.0
 - Added desktop shortcuts (major feature)
+
+## V 2.4.1
+- Switching windows can now switch to minimized apps, fixed various shortcut bugs.

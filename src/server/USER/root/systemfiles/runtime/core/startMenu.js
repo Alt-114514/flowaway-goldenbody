@@ -58,7 +58,7 @@ const addToRecents = window.protectedGlobals.addToRecents = function (appId) {
   saveStartMenuConfig();
 }
 
-const removeFromStartMenu = window.protectedGlobals.removeFromStartMenu = function removeFromStartMenu(appId) {
+const removeFromStartMenu = function (appId) {
   if (!window.protectedGlobals._startMenuConfig) return;
   const pinnedApps = window.protectedGlobals._startMenuConfig.pinnedApps || [];
   const index = pinnedApps.indexOf(appId);
@@ -164,19 +164,19 @@ window.protectedGlobals.tabButtons.forEach(btn => {
   });
 });
 
-const getBrightnessValue = function getBrightnessValue() {
+const getBrightnessValue = function () {
   window.protectedGlobals.statusData = window.protectedGlobals.statusData || {};
   const raw = parseInt(window.protectedGlobals.statusData.brightness, 10);
   if (Number.isNaN(raw)) return 100;
   return Math.min(100, Math.max(0, raw));
 };
 
-const getBrightnessMax = function getBrightnessMax() {
+const getBrightnessMax = function () {
   window.protectedGlobals.statusData = window.protectedGlobals.statusData || {};
   return !!window.protectedGlobals.statusData.batterySaverEnabled ? 50 : 100;
 };
 
-const updateBrightnessOverlayTheme = function updateBrightnessOverlayTheme() {
+const updateBrightnessOverlayTheme = function () {
   const overlay = window.protectedGlobals.brightnessOverlayEl;
   if (!overlay) return;
   const isDark = !!(window.protectedGlobals.data.dark);
@@ -199,7 +199,7 @@ const updateBrightnessOverlayTheme = function updateBrightnessOverlayTheme() {
   }
 };
 
-const updateBrightnessOverlayValue = function updateBrightnessOverlayValue(value) {
+const updateBrightnessOverlayValue = function (value) {
   const overlay = window.protectedGlobals.brightnessOverlayEl;
   if (!overlay) return;
   const max = getBrightnessMax();
@@ -213,7 +213,7 @@ const updateBrightnessOverlayValue = function updateBrightnessOverlayValue(value
   }
 };
 let brightnessOverlayHideTimer = null;
-const showBrightnessOverlay = function showBrightnessOverlay() {
+const showBrightnessOverlay = function () {
   const overlay = window.protectedGlobals.brightnessOverlayEl || ensureBrightnessOverlay();
   if (!overlay.isConnected) {
     document.body.appendChild(overlay);
@@ -230,7 +230,7 @@ const showBrightnessOverlay = function showBrightnessOverlay() {
   }, 5000);
 };
 
-const syncBrightnessOverlayControls = function syncBrightnessOverlayControls(options) {
+const syncBrightnessOverlayControls = function (options) {
   const slider = window.protectedGlobals.brightnessOverlaySlider;
   const max = getBrightnessMax();
   const currentValue = getBrightnessValue();
@@ -251,7 +251,7 @@ const syncBrightnessOverlayControls = function syncBrightnessOverlayControls(opt
   }
 };
 let overlay;
-const ensureBrightnessOverlay = function ensureBrightnessOverlay() {
+const ensureBrightnessOverlay = function () {
   if (window.protectedGlobals.brightnessOverlayEl) return window.protectedGlobals.brightnessOverlayEl;
   let overlay = document.createElement("div");
   overlay.setAttribute("role", "status");
@@ -315,7 +315,7 @@ const ensureBrightnessOverlay = function ensureBrightnessOverlay() {
   return overlay;
 };
 
-const applyBrightnessValue = function applyBrightnessValue(value, persist = true, showOverlay = false) {
+const applyBrightnessValue = function (value, persist = true, showOverlay = false) {
   const clamped = Math.min(getBrightnessMax(), Math.max(0, parseInt(value, 10) || 0));
   window.protectedGlobals.statusData = window.protectedGlobals.statusData || {};
   window.protectedGlobals.statusData.brightness = clamped;
@@ -335,7 +335,7 @@ const applyBrightnessValue = function applyBrightnessValue(value, persist = true
   }
 };
 
-const applyBrightnessDelta = window.protectedGlobals.applyBrightnessDelta = function applyBrightnessDelta(delta) {
+const applyBrightnessDelta = window.protectedGlobals.applyBrightnessDelta = function (delta) {
   window.protectedGlobals.statusData = window.protectedGlobals.statusData || {};
   const currentBrightness = getBrightnessValue();
   const maxBrightness = getBrightnessMax();
@@ -352,19 +352,19 @@ window.addEventListener("brightness-state-updated", () => {
 });
 ensureBrightnessOverlay();
 
-const cycleFocusedWindow = window.protectedGlobals.cycleFocusedWindow = function cycleFocusedWindow(reverse, modKey = "Alt") {
+const cycleFocusedWindow = window.protectedGlobals.cycleFocusedWindow = function (reverse, modKey = "Alt") {
   if ((window.protectedGlobals.cycleWindowFocus)) {
     window.protectedGlobals.cycleWindowFocus(!!reverse, modKey);
   }
 }
 
-const launchFocusedAppWindow = window.protectedGlobals.launchFocusedAppWindow = function launchFocusedAppWindow() {
+const launchFocusedAppWindow = window.protectedGlobals.launchFocusedAppWindow = function () {
   console.log(window.protectedGlobals.atTop)
   var focusedApp = window.protectedGlobals.atTop;
     window.protectedGlobals.launchApp(focusedApp);
 }
 
-const closeFocusedAppWindow = window.protectedGlobals.closeFocusedAppWindow = function closeFocusedAppWindow() {
+const closeFocusedAppWindow = window.protectedGlobals.closeFocusedAppWindow = function () {
   if (!window.protectedGlobals.atTop) return;
   var targetAppId = String(window.protectedGlobals.atTop || "").trim();
   if (!targetAppId) return;
@@ -434,7 +434,7 @@ const closeFocusedAppWindow = window.protectedGlobals.closeFocusedAppWindow = fu
   window.protectedGlobals.removeAllEventListenersForApp(targetAppId + top._goldenbodyId);
 }
 
-const createShortcutButton = window.protectedGlobals.createShortcutButton = function createShortcutButton(label, description, handler) {
+const createShortcutButton = function createShortcutButton(label, description, handler) {
   var isDarkTheme = !!(window.protectedGlobals.data.dark);
   const btn = document.createElement("button");
   btn.type = "button";
@@ -464,7 +464,7 @@ const createShortcutButton = window.protectedGlobals.createShortcutButton = func
   return btn;
 }
 
-const renderQuickActionsGrid = window.protectedGlobals.renderQuickActionsGrid = async function renderQuickActionsGrid() {
+const renderQuickActionsGrid = async function () {
   const container = document.getElementById('shortcutsGrid');
   if (!container) return;
   container.innerHTML = '';
@@ -482,7 +482,7 @@ const renderQuickActionsGrid = window.protectedGlobals.renderQuickActionsGrid = 
 }
 
 // ============= RENDER FUNCTIONS =============
-const renderPinnedAppsGrid = window.protectedGlobals.renderPinnedAppsGrid = async function renderPinnedAppsGrid() {
+const renderPinnedAppsGrid = window.protectedGlobals.renderPinnedAppsGrid = async function () {
   const container = document.getElementById('appsGrid');
   if (!container) return;
   container.innerHTML = '';
@@ -501,7 +501,7 @@ app.id, app
   }
 }
 
-const renderRecentsGrid = window.protectedGlobals.renderRecentsGrid = async function renderRecentsGrid() {
+const renderRecentsGrid = async function () {
   const container = document.getElementById('recentsGrid');
   if (!container) return;
   container.innerHTML = '';
@@ -524,7 +524,7 @@ app.id, app
   }
 }
 
-const renderAllAppsGrid = window.protectedGlobals.renderAllAppsGrid = async function renderAllAppsGrid() {
+const renderAllAppsGrid = async function () {
   const container = document.getElementById('allAppsGrid');
   if (!container) return;
   container.innerHTML = '';
@@ -535,7 +535,7 @@ const renderAllAppsGrid = window.protectedGlobals.renderAllAppsGrid = async func
     createAppTile(app, container, false);
   }
 }
-const createAppTile = window.protectedGlobals.createAppTile = function createAppTile(app, container, draggable) {
+const createAppTile = function (app, container, draggable) {
   const div = document.createElement('div');
   div.className = 'app';
   div.dataset.appId = app.id;
@@ -616,7 +616,7 @@ div.innerHTML = ` ${app.pngEnabled ? `<img src="data:image/[FORMAT];base64,${app
   container.appendChild(div);
 }
 
-const showAppContextMenu = window.protectedGlobals.showAppContextMenu = function showAppContextMenu(x, y, app, canPin) {
+const showAppContextMenu = function (x, y, app, canPin) {
   // Remove existing menu
   const existing = document.querySelector('.app-context-menu');
   if (existing) existing.remove();
@@ -639,7 +639,7 @@ const showAppContextMenu = window.protectedGlobals.showAppContextMenu = function
   }
 
   if (canPin) {
-    html += `<button class="context-menu-item danger" data-action="remove">❌ Remove from Start Menu</button>`;
+    html += `<button class="context-menu-item danger" data-action="remove">📌 Unpin from Start Menu</button>`;
   }
 
   menu.innerHTML = html;

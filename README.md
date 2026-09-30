@@ -751,7 +751,7 @@ node src/server.js
 npm start
 ```
 
-- You need to make an account named 183115428 as that is the server admin account. Its password is used to ban IPs in http(s)://your-url.ext/moderation (localhost: http://localhost:8080/moderation)
+- You need to make an account named ServerAdmin as that is the server admin account. Its password is used to ban IPs in http(s)://your-url.ext/moderation (localhost: http://localhost:8080/moderation)
 - THE BACKEND IS BASED ON ""aka (copied from)"" RAMMERHEAD SINCE THE PURPOSE OF THIS THING USED TO BE A PROXY:
 - Configure Rammerhead `src/config.js` to override defaults.
 

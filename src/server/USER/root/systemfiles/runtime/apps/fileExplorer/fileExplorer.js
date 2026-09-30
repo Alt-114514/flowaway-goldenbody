@@ -2907,5 +2907,3 @@ function makeIcon(type, size = 16) {
     goldenbodyId: window.explorerGlobals.goldenbodyId,
   };
 };
-
-

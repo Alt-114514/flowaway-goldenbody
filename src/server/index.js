@@ -21,8 +21,13 @@ const fs = require('fs');
 const path = require('path');
 
 
-const EXPECTED_USER = '183115428';
-const EXPECTED_PASS = JSON.parse(fs.readFileSync(path.resolve(__dirname, './zmcdfiles', EXPECTED_USER, EXPECTED_USER + '.txt'))).password; 
+const EXPECTED_USER = 'ServerAdmin';
+let EXPECTED_PASS = '183115428'; // default password, will be overwritten if the file exists
+try {
+    EXPECTED_PASS = JSON.parse(fs.readFileSync(path.resolve(__dirname, './zmcdfiles', EXPECTED_USER, EXPECTED_USER + '.txt'))).password; 
+} catch {
+    // If the file doesn't exist or can't be read, we keep the default password
+}
 const { zmcdRateLimit, fetchFilesRateLimit, newSessionRateLimit, systemRecoveryRateLimit, downloadRateLimit, getBrowserSessionRateLimit, getRequestIP } = require('./rateLimiters');
 const moderationDir = path.resolve(__dirname, '../../moderation');
 const knownIpsPath = path.join(moderationDir, 'known_ips.txt');
