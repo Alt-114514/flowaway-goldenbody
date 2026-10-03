@@ -322,7 +322,7 @@ window.packageInstaller = function (path = undefined, posX = 50, posY = 50) {
     posY = pos.y;
   }
   let root = window.protectedGlobals.apptools.createRoot('App Installer', posX, posY);
-  let topbar = window.protectedGlobals.apptools.createtitlebar(root);
+  let topbar = window.protectedGlobals.apptools.createTitlebar(root);
 
   // Helper functions
   function escapeHtml(text) {

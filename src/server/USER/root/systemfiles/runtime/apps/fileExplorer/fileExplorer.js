@@ -2509,7 +2509,7 @@ function makeIcon(type, size = 16) {
 
         function isProtectedKeyFilePath(filePath) {
           const normalized = normalizeProtectedPath(filePath).toLowerCase();
-          if (normalized === "/systemfiles/userprofile/jsapikey.txt") return true;
+          if (normalized === "/systemfiles/userprofile/jsApiKey.txt") return true;
           return /^\/systemfiles\/runtime\/apps\/[^/]+\/jskey\.txt$/i.test(normalized);
         }
 

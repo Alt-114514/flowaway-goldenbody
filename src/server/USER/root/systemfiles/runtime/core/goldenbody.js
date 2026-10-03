@@ -1481,6 +1481,7 @@
       window.protectedGlobals.data.taskbarOnTop = newVal;
       // update runtime behavior
       changeTaskbarPosition();
+      window.protectedGlobals.updateDesktopShortcutLayerPosition();
       window.protectedGlobals.persistUserProfilePatch({ taskbarOnTop: newVal });
       closeMenu();
     });

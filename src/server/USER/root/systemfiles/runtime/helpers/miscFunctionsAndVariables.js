@@ -304,7 +304,7 @@ window.protectedGlobals.showModal = function(title, body, level) {
 }
 
 window.alert = function (message) {
-  window.protectedGlobals.showModal("Alert", String(message || ""), "info");
+  window.protectedGlobals.showModal("Notification", String(message || ""), "info");
 };
 
 window.protectedGlobals.showConfirmDialog = (title, message, okText, cancelText) => {

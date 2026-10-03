@@ -113,6 +113,9 @@ document.body.appendChild(startMenu);
 (async () => {
   await loadStartMenuConfig();
   await window.protectedGlobals.loadAppsFromTree();
+  let desktopScript = document.createElement("script");
+  desktopScript.textContent = await window.protectedGlobals.ReadFile("systemfiles/runtime/core/desktop.js", { text: true, direct: true });
+  document.head.appendChild(desktopScript);
 })();
 
 // ============= TAB SWITCHING =============

@@ -316,7 +316,7 @@ window.protectedGlobals.initAppTools = function () {
     root.tabIndex = "0";
   };
   let applyTitlebarTheme = null;
-  existing.createtitlebar = function (root) {
+  existing.createTitlebar = function (root) {
     if (!root) return null;
     var existingTop = root.querySelector(".appTopBar");
     if (existingTop) return existingTop;
@@ -746,14 +746,14 @@ window.protectedGlobals.initAppTools = function () {
       instance.rootElement = root;
     }
     if (!topbar) {
-      topbar = existing.createtitlebar(root);
+      topbar = existing.createTitlebar(root);
       instance.topbar = topbar;
       instance.topbarElement = topbar;
       instance.titlebar = topbar;
       instance.titlebarElement = topbar;
       instance.btnMax = root.querySelector(".btnMaxColor");
       // Ensure the instance gets the titlebar theme applier function
-      // createtitlebar assigns to the outer `applyTitlebarTheme` variable,
+      // createTitlebar assigns to the outer `applyTitlebarTheme` variable,
       // so copy that function onto the instance after creation.
       instance.applyTitlebarTheme = applyTitlebarTheme || null;
       // Also attach to the DOM root for external callers that expect it there.

@@ -786,7 +786,6 @@ window.tmpGlobals.coreScriptUrls = [
   "systemfiles/runtime/core/appLoader.js",
   "systemfiles/runtime/helpers/initapptools.js",
   "systemfiles/runtime/core/startMenu.js",
-  "systemfiles/runtime/core/desktop.js",
   "systemfiles/runtime/core/goldenbody.js"
 ];
 window.tmpGlobals.coreESMUrls = [

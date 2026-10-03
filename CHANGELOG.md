@@ -141,3 +141,6 @@
 
 ## V 2.4.1
 - Switching windows can now switch to minimized apps, fixed various shortcut bugs.
+
+## V 2.4.2
+- bulk update on shortcuts
