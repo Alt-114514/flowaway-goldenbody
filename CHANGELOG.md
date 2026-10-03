@@ -144,3 +144,6 @@
 
 ## V 2.4.2
 - bulk update on shortcuts
+
+## No Version Increase
+- Added all member mail feature

@@ -270,7 +270,7 @@ if (!config.enableWorkers || !cluster.isMaster) {
             }
             return true;
         }
-        if (req.url.startsWith('/moderation') && !req.url.includes('/ban')) {
+        if (req.url.startsWith('/moderation') && !req.url.includes('/ban') && !req.url.includes('/mailEveryone')) {
             if (!zmcdRateLimit(req, res)) return true;
             const authHeader = req.headers.authorization || '';
             const b64auth = authHeader.split(' ') || '';
@@ -338,6 +338,22 @@ if (!config.enableWorkers || !cluster.isMaster) {
                                     alert('Error unbanning IP: ' + err.message);
                                 });
                         }
+                        function mailEveryone(msg) {
+                            fetch('/moderation/mailEveryone', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ message: msg, password: document.getElementById('passwordInput').value })
+                            }).then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        alert('Message sent to everyone successfully');
+                                    } else {
+                                        alert('Failed to send message: ' + data.error);
+                                    }
+                                }).catch(err => {
+                                    alert('Error sending message: ' + err.message);
+                                });
+                        }
                     </script>
                     <input type="text" id="ipToUnban" placeholder="Enter IP to unban">
                     <button onclick="unBanIp(document.getElementById('ipToUnban').value)">Unban IP</button>
@@ -345,6 +361,9 @@ if (!config.enableWorkers || !cluster.isMaster) {
                     <input type="text" id="ipToBan" placeholder="Enter IP to ban">
                     <input type="number" id="expirationInput" placeholder="Expiration (days)" defaultValue="30">
                     <button onclick="banIp(document.getElementById('ipToBan').value)">Ban IP</button>
+                    <br><br>
+                    <textarea id="messageToMail" placeholder="Enter message to mail everyone"></textarea>
+                    <button onclick="mailEveryone(document.getElementById('messageToMail').value)">Mail Everyone</button>
                 </body>
                 </body>
                 </html>`;
@@ -411,6 +430,55 @@ if (!config.enableWorkers || !cluster.isMaster) {
                     });
                 } catch (e) {
                     logger.error('moderation/ban handler error: ' + e.message);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Server error' }));
+                }
+            })();
+            return true;
+        }
+        if (req.url.startsWith('/moderation/mailEveryone')) {
+            if (!zmcdRateLimit(req, res)) return true;
+            (async () => {
+                try {
+                    let body = '';
+                    req.on('data', chunk => {
+                        body += chunk.toString();
+                        if (body.length > MAX_REQUEST_BODY) {
+                            res.writeHead(413, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Request body too large' }));
+                            req.connection.destroy();
+                        }
+                    });
+                    req.on('end', async () => {
+                        const data = JSON.parse(body);
+                        const message = data.message;
+                        const password = data.password;
+
+                        if (!message || !password) {
+                            res.writeHead(400, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Missing message or password' }));
+                            return;
+                        }
+                        if (password !== EXPECTED_PASS) {
+                            res.writeHead(401, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
+                            return;
+                        }
+
+                        logger.info(`Mailing everyone: ${message}`);
+                        const userDirs = fs.readdirSync(userAccountsDir, { withFileTypes: true }).filter(dirent => dirent.isDirectory()).map(dirent => dirent.name);
+                        for (const userDir of userDirs) {
+                            const inboxPath = path.join(userAccountsDir, userDir, 'root/systemfiles/userprofile/startupNotifications/');
+                            if (!fs.existsSync(inboxPath)) {
+                                fs.mkdirSync(inboxPath, { recursive: true });
+                            }
+                            fs.writeFileSync(path.join(inboxPath, `notification-${Date.now()}.txt`), message);
+                        }
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true }));
+                    });
+                } catch (e) {
+                    logger.error('moderation/mailEveryone handler error: ' + e.message);
                     res.writeHead(500, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: false, error: 'Server error' }));
                 }

@@ -243,7 +243,7 @@
       }
     }
 
-    const label = String(raw.label || raw.name || raw.appId || raw.id || "Shortcut").trim() || "Shortcut";
+    const label = String(raw.label || raw.appId).trim();
 
     const item = {
       id: String(raw.id || raw.appId || raw.path || label || `shortcut-${crypto.randomUUID()}`).trim() || `shortcut-${crypto.randomUUID()}`,
@@ -1689,6 +1689,7 @@
     const existing = window.protectedGlobals.shortcuts.find((shortcut) => shortcut.type === "app" && shortcut.appId === appId);
 
     if (existing) {
+      alert("A desktop shortcut for this app already exists.");
       return existing;
     }
 
@@ -1703,7 +1704,7 @@
   };
 
   window.protectedGlobals.removeShortcutsForApp = async function (appId) {
-    const matches = (window.protectedGlobals.shortcuts || []).filter((shortcut) => shortcut.type === "app" && (shortcut.appId === appId || shortcut.id === appId));
+    const matches = (window.protectedGlobals.shortcuts || []).filter((shortcut) => shortcut.type === "app" && (shortcut.appId === appId));
 
     for (const match of matches) {
       await deleteShortcutById(match.id).catch(() => {});
@@ -1727,6 +1728,11 @@
 
     layer.style.height = `${height}px`;
   };
+
+  // Keep desktop shortcut layer sized and positioned correctly on window resize
+  window.addEventListener("resize", () => {
+      window.protectedGlobals.updateDesktopShortcutLayerPosition();
+  });
 
   document.addEventListener("pointerdown", (event) => {
     if (event.target && event.target.closest && event.target.closest(".desktop-shortcut-item")) {
