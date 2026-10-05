@@ -1047,7 +1047,7 @@ window.protectedGlobals.deleteApp = async function (obj, cleanupOnly = false) {
   if (!obj) return;
   if (!cleanupOnly) {
     await window.protectedGlobals.DeleteFolder(`/systemfiles/runtime/apps/${obj.folderName}`);
-    await window.protectedGlobals.removeShortcutsForApp(obj.id || obj.folderName || "").catch(() => {});
+    await window.protectedGlobals.removeShortcutsForApp(obj.id).catch(() => {});
   }
   for (const element of window.protectedGlobals.apps) {
     if (element.id == obj.id) {

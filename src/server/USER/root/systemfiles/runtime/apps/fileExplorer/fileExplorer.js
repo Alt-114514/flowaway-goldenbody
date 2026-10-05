@@ -2294,9 +2294,7 @@ function makeIcon(type, size = 16) {
           type: isFolder ? "folder" : "file",
           label: selectedItem[0],
           name: selectedItem[0],
-          path: itemPath.startsWith("/") ? itemPath : `/${itemPath}`,
-          x: 24,
-          y: 24,
+          path: itemPath.startsWith("/") ? itemPath : `/${itemPath}`
         };
         window.protectedGlobals.createDesktopShortcut(record);
       });
