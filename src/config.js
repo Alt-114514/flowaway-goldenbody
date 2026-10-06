@@ -65,7 +65,7 @@ module.exports = {
         const finalPort = (finalProtocol === 'https:' ? 443 : 80);
 
         return {
-            hostname: 'studious-space-enigma-6974qxw4r49xfxxp7-8080.app.github.dev',
+            hostname: 'studious-space-enigma-6974qxw4r49xfxxp7-8080.app.github.dev/learn.html',
             port: finalPort,
             crossDomainPort: process.env.CROSS_DOMAIN_PORT ? Number(process.env.CROSS_DOMAIN_PORT) : (finalProtocol === 'https:' ? 443 : 80),
             protocol: finalProtocol
